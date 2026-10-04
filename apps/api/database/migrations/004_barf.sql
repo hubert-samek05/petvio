@@ -1,0 +1,87 @@
+CREATE TABLE IF NOT EXISTS barf_ingredients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(30) NOT NULL,
+    species VARCHAR(10) NOT NULL DEFAULT 'both',
+    calories_per_100g NUMERIC(6,1),
+    protein_per_100g NUMERIC(5,1),
+    fat_per_100g NUMERIC(5,1),
+    calcium_mg_per_100g NUMERIC(7,1),
+    phosphorus_mg_per_100g NUMERIC(7,1),
+    recommended_pct VARCHAR(30),
+    description TEXT,
+    feeding_tip TEXT,
+    caution TEXT,
+    status VARCHAR(10) NOT NULL DEFAULT 'good',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS barf_plans (
+    id SERIAL PRIMARY KEY,
+    pet_id INTEGER NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    weight_kg NUMERIC(6,2) NOT NULL,
+    activity_level VARCHAR(20) NOT NULL DEFAULT 'active',
+    ratio_model VARCHAR(20) NOT NULL DEFAULT 'standard',
+    muscle_meat_pct NUMERIC(5,2) NOT NULL,
+    bone_pct NUMERIC(5,2) NOT NULL,
+    liver_pct NUMERIC(5,2) NOT NULL,
+    other_organ_pct NUMERIC(5,2) NOT NULL,
+    veg_fruit_pct NUMERIC(5,2) NOT NULL,
+    meals_per_day INTEGER NOT NULL DEFAULT 2,
+    daily_food_grams NUMERIC(7,1) NOT NULL,
+    muscle_meat_grams NUMERIC(7,1) NOT NULL,
+    bone_grams NUMERIC(7,1) NOT NULL,
+    liver_grams NUMERIC(7,1) NOT NULL,
+    other_organ_grams NUMERIC(7,1) NOT NULL,
+    veg_fruit_grams NUMERIC(7,1) NOT NULL,
+    calories_target INTEGER,
+    notes TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_barf_ingredients_category ON barf_ingredients(category);
+CREATE INDEX IF NOT EXISTS idx_barf_ingredients_species ON barf_ingredients(species);
+CREATE INDEX IF NOT EXISTS idx_barf_plans_pet_id ON barf_plans(pet_id);
+CREATE INDEX IF NOT EXISTS idx_barf_plans_user_id ON barf_plans(user_id);
+
+INSERT INTO barf_ingredients (name, category, species, calories_per_100g, protein_per_100g, fat_per_100g, calcium_mg_per_100g, phosphorus_mg_per_100g, recommended_pct, description, feeding_tip, caution, status) VALUES
+('Kurczak (mięso bez kości)', 'muscle_meat', 'both', 120, 21, 4, 10, 180, '60-80% mięsa', 'Podstawowe, łatwo strawne źródło białka.', 'Podawaj z skórą dla dodatkowego tłuszczu jeśli zwierzę potrzebuje więcej energii.', NULL, 'good'),
+('Indyk (mięso)', 'muscle_meat', 'both', 135, 21, 5, 9, 190, '60-80% mięsa', 'Chude, lekkostrawne mięso, dobra alternatywa dla alergików na kurczaka.', NULL, NULL, 'good'),
+('Wołowina (mięso mielone)', 'muscle_meat', 'both', 250, 17, 20, 8, 150, '60-80% mięsa', 'Bogate w żelazo i witaminy z grupy B.', 'Wybieraj chudsze kawałki, jeśli zwierzę ma tendencję do nadwagi.', NULL, 'good'),
+('Wołowina (chuda)', 'muscle_meat', 'both', 150, 21, 7, 8, 170, '60-80% mięsa', 'Dobre źródło białka o niższej zawartości tłuszczu.', NULL, NULL, 'good'),
+('Jagnięcina', 'muscle_meat', 'both', 260, 16, 21, 9, 160, '60-80% mięsa', 'Bogata energetycznie, rzadziej uczula.', 'Dobra opcja przy dietach eliminacyjnych.', NULL, 'good'),
+('Kaczka (mięso)', 'muscle_meat', 'both', 200, 19, 14, 8, 165, '60-80% mięsa', 'Tłustsze mięso, dobrze tolerowane przez alergików.', NULL, NULL, 'good'),
+('Królik (mięso)', 'muscle_meat', 'both', 130, 21, 5, 12, 175, '60-80% mięsa', 'Bardzo chude i hipoalergiczne mięso.', 'Dobre dla zwierząt z wrażliwym przewodem pokarmowym.', NULL, 'good'),
+('Wieprzowina (mięso, dobrze sprawdzone)', 'muscle_meat', 'dog', 240, 20, 18, 9, 190, '60-80% mięsa', 'Kalorycznie bogate mięso.', 'Podawaj tylko mięso z zaufanego, sprawdzonego źródła.', 'Surowa wieprzowina niesprawdzonego pochodzenia może przenosić wirus choroby Aujeszkyego – śmiertelny dla psów.', 'caution'),
+('Ryby białe (dorsz, mintaj)', 'fish', 'both', 90, 18, 1, 15, 200, '5-10% zamiennik mięsa', 'Lekkostrawne źródło białka i jodu.', 'Podawaj 1-2x w tygodniu jako urozmaicenie.', 'Zawsze podawaj bez ości.', 'good'),
+('Łosoś (surowy, mrożony min. 7 dni)', 'fish', 'both', 200, 20, 13, 15, 240, '5-10% zamiennik mięsa', 'Bogaty w kwasy omega-3, wspiera skórę i sierść.', 'Mrożenie min. 7 dni zabija pasożyty.', 'Nigdy nie podawaj surowego łososia bez wcześniejszego zamrożenia.', 'caution'),
+('Wątroba drobiowa/wołowa', 'liver', 'both', 135, 20, 4, 8, 300, '5% wątroba', 'Skoncentrowane źródło witaminy A, żelaza i witamin B.', 'Nie przekraczaj 5% dawki – nadmiar witaminy A jest szkodliwy.', 'Zbyt duża ilość może powodować hiperwitaminozę A.', 'caution'),
+('Nerki', 'other_organ', 'both', 100, 17, 3, 15, 230, '5% inne narządy', 'Dobre źródło selenu i witamin z grupy B.', NULL, NULL, 'good'),
+('Serce (wołowe/kurze)', 'other_organ', 'both', 110, 17, 4, 6, 180, '5% inne narządy', 'Bogate w taurynę i CoQ10, ważne szczególnie dla kotów.', 'Serce liczy się jako mięso mięśniowe, ale warto je uwzględnić dla tauryny.', NULL, 'good'),
+('Śledziona', 'other_organ', 'both', 120, 18, 4, 10, 200, '5% inne narządy', 'Bogata w żelazo.', 'Podawaj z umiarem, może rozluźniać stolec.', NULL, 'caution'),
+('Żołądek/Żwacz (tripe)', 'other_organ', 'dog', 90, 15, 3, 30, 150, '5% inne narządy', 'Naturalna zawartość enzymów trawiennych i probiotyków.', 'Zielony żwacz ma silny zapach, ale jest bardzo wartościowy odżywczo.', NULL, 'good'),
+('Szyje kurczaka (surowe, mięsno-kostne)', 'bone', 'both', 150, 18, 8, 400, 300, '10% kość', 'Surowe, miękkie kości – dobre źródło wapnia i naturalna higiena zębów.', 'Podawaj wyłącznie surowe, nigdy gotowane.', 'Zawsze nadzoruj karmienie kośćmi, ryzyko zadławienia u małych ras.', 'caution'),
+('Skrzydełka kurczaka (surowe)', 'bone', 'both', 200, 18, 15, 350, 280, '10% kość', 'Miękkie kości z dużą zawartością tłuszczu.', 'Dobra opcja na kość mięsno-kostną dla większości psów.', 'Nie podawaj gotowanych kości – mogą się rozłupywać.', 'caution'),
+('Grzbiety kurczaka (surowe)', 'bone', 'both', 180, 17, 12, 380, 290, '10% kość', 'Popularna kość mięsno-kostna, dobrze tolerowana.', NULL, 'Nadzoruj karmienie, szczególnie u małych psów i kotów.', 'caution'),
+('Kości gotowane (jakiekolwiek)', 'bone', 'both', 0, 0, 0, 0, 0, '0%', 'Gotowane kości są łamliwe i niebezpieczne.', NULL, 'Mogą powodować rozdarcia przełyku, żołądka i jelit – nigdy nie podawaj.', 'avoid'),
+('Kości nośne / szpikowe surowe (duże, twarde)', 'bone', 'dog', 150, 15, 10, 300, 250, 'unikać jako główne źródło', 'Bardzo twarde kości, ryzyko złamania zębów.', 'Mogą służyć jako okazjonalny gryzak, nie jako źródło wapnia w diecie.', 'Duże twarde kości mogą powodować złamania zębów i niedrożności.', 'caution'),
+('Marchew', 'vegetable', 'both', 41, 1, 0, 33, 35, '5-10% warzywa', 'Źródło beta-karotenu i błonnika.', 'Podawaj zmiksowaną lub rozgniecioną dla lepszego wchłaniania.', NULL, 'good'),
+('Dynia', 'vegetable', 'both', 26, 1, 0, 21, 44, '5-10% warzywa', 'Wspiera trawienie, łagodzi biegunki i zaparcia.', NULL, NULL, 'good'),
+('Brokuły', 'vegetable', 'both', 34, 3, 0, 47, 66, '5-10% warzywa', 'Bogate w witaminy C i K.', 'Podawaj z umiarem – nadmiar może powodować wzdęcia.', NULL, 'caution'),
+('Szpinak', 'vegetable', 'both', 23, 3, 0, 99, 49, '5-10% warzywa', 'Źródło żelaza i witamin, ale zawiera szczawiany.', 'Podawaj sporadycznie w małych ilościach.', 'Duże ilości szczawianów mogą wpływać na wchłanianie wapnia i nerki.', 'caution'),
+('Cukinia', 'vegetable', 'both', 17, 1, 0, 16, 38, '5-10% warzywa', 'Lekkostrawne warzywo, dobre źródło nawodnienia.', NULL, NULL, 'good'),
+('Jabłko (bez pestek)', 'fruit', 'both', 52, 0, 0, 6, 11, '2-5% owoce', 'Źródło błonnika i witamin, naturalnie słodkie.', 'Zawsze usuwaj pestki i gniazda nasienne.', 'Pestki jabłek zawierają związki cyjanogenne – zawsze usuwaj.', 'good'),
+('Borówki', 'fruit', 'both', 57, 1, 0, 6, 12, '2-5% owoce', 'Silne antyoksydanty.', NULL, NULL, 'good'),
+('Winogrona / rodzynki', 'fruit', 'both', 69, 1, 0, 10, 20, '0%', 'Owoc bardzo popularny u ludzi.', NULL, 'Nawet małe ilości mogą uszkodzić nerki psów i kotów – absolutny zakaz.', 'avoid'),
+('Olej z łososia', 'oil', 'both', 900, 0, 100, 0, 0, '1-2 łyżeczki/dzień', 'Skoncentrowane źródło kwasów omega-3 EPA/DHA.', 'Dodawaj bezpośrednio do posiłku, przechowuj w chłodnym miejscu.', NULL, 'good'),
+('Olej kokosowy', 'oil', 'both', 862, 0, 100, 0, 0, '1 łyżeczka/dzień', 'Tłuszcze MCT, wspomagają skórę i energię.', 'Wprowadzaj stopniowo, obserwuj tolerancję.', 'U kotów podawać w małych ilościach – może obciążać wątrobę w nadmiarze.', 'caution'),
+('Jajko (całe, ze skorupką dla wapnia)', 'dairy_egg', 'both', 155, 13, 11, 50, 190, '1-3x w tygodniu', 'Pełnowartościowe białko i biotyna (żółtko neutralizuje awidynę z białka).', 'Zmielona skorupka jest dobrym naturalnym źródłem wapnia.', 'Surowe białko jajka w dużych ilościach może wiązać biotynę – podawaj całe jajko.', 'good'),
+('Jogurt naturalny (bez cukru)', 'dairy_egg', 'both', 60, 4, 3, 120, 100, 'okazjonalnie', 'Probiotyki wspierające mikroflorę jelitową.', 'Wybieraj wersje bez laktozy jeśli zwierzę jej nie toleruje.', NULL, 'caution'),
+('Twaróg (niskotłuszczowy)', 'dairy_egg', 'both', 98, 11, 4, 90, 140, 'okazjonalnie', 'Dobre źródło białka i wapnia.', NULL, NULL, 'good'),
+('Algi / spirulina', 'supplement', 'both', 290, 57, 8, 120, 90, 'szczypta dziennie', 'Naturalne źródło jodu i przeciwutleniaczy.', 'Dodawaj w małych ilościach, kontroluj poziom jodu przy problemach z tarczycą.', NULL, 'good'),
+('Skorupki jaj (zmielone)', 'supplement', 'both', 0, 0, 0, 38000, 0, 'zamiennik kości', 'Skoncentrowane źródło wapnia, alternatywa gdy zwierzę nie jadło kości.', '1/2 łyżeczki zmielonej skorupki ≈ 1g wapnia.', 'Dawkuj precyzyjnie – nadmiar wapnia jest szkodliwy, szczególnie dla szczeniąt dużych ras.', 'caution'),
+('Czosnek / cebula / por', 'vegetable', 'both', 0, 0, 0, 0, 0, '0%', 'Popularne w kuchni ludzkiej warzywa.', NULL, 'Toksyczne dla psów i kotów – uszkadzają czerwone krwinki, mogą prowadzić do anemii.', 'avoid')
+ON CONFLICT DO NOTHING;

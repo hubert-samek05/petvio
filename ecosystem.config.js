@@ -1,0 +1,43 @@
+module.exports = {
+  apps: [
+    {
+      name: 'petvio-api',
+      cwd: './apps/api',
+      script: 'src/server.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3100,
+      },
+      error_file: '~/.pm2/logs/petvio-api-error.log',
+      out_file: '~/.pm2/logs/petvio-api-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '500M',
+    },
+    {
+      name: 'petvio-web',
+      cwd: './apps/web',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3000',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+      },
+      error_file: '~/.pm2/logs/petvio-web-error.log',
+      out_file: '~/.pm2/logs/petvio-web-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '800M',
+    },
+  ],
+};

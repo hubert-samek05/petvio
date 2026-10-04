@@ -1,0 +1,25 @@
+{
+  "name": "petvio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Petvio - Kompleksowa aplikacja dla właścicieli zwierząt",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace=@petvio/api",
+    "dev:web": "npm run dev --workspace=@petvio/web",
+    "build": "npm run build --workspaces",
+    "start": "concurrently \"npm run start:api\" \"npm run start:web\"",
+    "start:api": "npm run start --workspace=@petvio/api",
+    "start:web": "npm run start --workspace=@petvio/web"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0"
+  }
+}
