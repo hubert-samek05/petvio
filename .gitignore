@@ -1,0 +1,27 @@
+node_modules/
+.DS_Store
+*.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+*.aab
+*.apk
+
+# iOS
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+ios/App/Podfile.lock
+*.ipa
+*.dSYM.zip
+*.dSYM
+xcuserdata/
+
+# Secrets — NIE commitować podpisów produkcyjnych do publicznego repo
+android/keystore.properties
+android/*.keystore
+android/*.jks

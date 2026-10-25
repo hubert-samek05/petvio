@@ -1,0 +1,84 @@
+workflows:
+  ios-app-store:
+    name: Petvio iOS (App Store)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Utworz w Codemagic: Team settings -> Integrations -> App Store Connect
+      # (App Store Connect API key z App Store Connect -> Users and Access -> Integrations)
+      app_store_connect: petvio-key
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: pl.petvio.mobile
+      vars:
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "pl.petvio.mobile"
+      xcode: latest
+      node: v22
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install -g pnpm
+          pnpm install --no-frozen-lockfile
+      - name: Capacitor sync iOS
+        script: |
+          npx cap sync ios
+      - name: Increment build number
+        script: |
+          cd ios/App
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Build IPA
+        script: |
+          set -e
+          xcode-project use-profiles
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+
+  android-release:
+    name: Petvio Android (AAB)
+    max_build_duration: 60
+    environment:
+      java: 21
+      vars:
+        BUNDLE_ID: "pl.petvio.mobile"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install -g pnpm
+          pnpm install --no-frozen-lockfile
+      - name: Capacitor sync Android
+        script: |
+          npx cap sync android
+      - name: Bump versionCode
+        script: |
+          sed -i "s/versionCode [0-9]*/versionCode $BUILD_NUMBER/" android/app/build.gradle
+      - name: Build AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab

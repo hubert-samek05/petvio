@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Petvio</string>
+    <string name="title_activity_main">Petvio</string>
+    <string name="package_name">pl.petvio.mobile</string>
+    <string name="custom_url_scheme">pl.petvio.mobile</string>
+</resources>
