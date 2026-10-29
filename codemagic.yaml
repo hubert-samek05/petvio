@@ -27,7 +27,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install -g pnpm
+          export COREPACK_ENABLE_STRICT=0
+          command -v pnpm >/dev/null || npm install -g pnpm
           pnpm install --no-frozen-lockfile
       - name: Capacitor sync iOS
         script: |
@@ -68,7 +69,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install -g pnpm
+          export COREPACK_ENABLE_STRICT=0
+          command -v pnpm >/dev/null || npm install -g pnpm
           pnpm install --no-frozen-lockfile
       - name: Capacitor sync Android
         script: |
