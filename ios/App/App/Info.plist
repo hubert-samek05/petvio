@@ -26,6 +26,14 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Petvio używa lokalizacji do śledzenia trasy spacerów z Twoim pupilem.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Petvio używa lokalizacji do śledzenia trasy spacerów z Twoim pupilem.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Petvio używa aparatu do zdjęć pupila, skanowania paragonów i list zakupów.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Petvio używa biblioteki zdjęć do dodawania zdjęć pupila, paragonów i list zakupów.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
