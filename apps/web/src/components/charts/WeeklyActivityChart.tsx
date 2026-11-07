@@ -15,20 +15,20 @@ export default function WeeklyActivityChart({ minutesByDay }: { minutesByDay?: n
   const total = data.reduce((sum, d) => sum + d.minuty, 0);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+    <div className="pv-card p-6 h-full">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="font-serif text-lg font-normal text-gray-900">Aktywność tygodniowa</h3>
+        <h3 className="pv-section-title">Aktywność tygodniowa</h3>
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">7 dni</span>
       </div>
       <p className="text-sm text-gray-500 mb-4">Minuty spacerów w ostatnim tygodniu</p>
 
       {total === 0 ? (
-        <div className="h-[180px] flex flex-col items-center justify-center text-center rounded-xl bg-brand-mint/40 border border-dashed border-brand-light">
-          <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center mb-3 shadow-sm">
+        <div className="h-[180px] flex flex-col items-center justify-center text-center rounded-2xl bg-brand-mint/40 border border-dashed border-brand-light">
+          <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center mb-3 shadow-sm animate-float">
             <Footprints className="w-5 h-5 text-brand-dark" />
           </div>
           <p className="text-sm text-gray-600 font-medium mb-1">Brak zarejestrowanych spacerów</p>
-          <Link href="/dashboard/walk-tracker" className="text-sm font-semibold text-brand-dark hover:underline">
+          <Link href="/dashboard/walk-tracker" className="text-sm font-semibold text-brand-dark hover:text-brand transition-colors">
             Zacznij śledzić spacery →
           </Link>
         </div>
@@ -49,7 +49,7 @@ export default function WeeklyActivityChart({ minutesByDay }: { minutesByDay?: n
                 contentStyle={{ borderRadius: 12, border: '1px solid #DCEFE3', fontSize: 12 }}
                 formatter={(value: number) => [`${value} min`, 'Spacer']}
               />
-              <Area type="monotone" dataKey="minuty" stroke="#0F3D2E" strokeWidth={2.5} fill="url(#activityGradient)" />
+              <Area type="monotone" dataKey="minuty" stroke="#0F3D2E" strokeWidth={2.5} fill="url(#activityGradient)" isAnimationActive animationDuration={900} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

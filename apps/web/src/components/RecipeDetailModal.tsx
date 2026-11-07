@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { recipeApi } from '@/lib/api';
+import { recipeApi, petApi, feedingLogApi } from '@/lib/api';
+import { format } from 'date-fns';
 import {
   X,
   Heart,
@@ -16,8 +17,15 @@ import {
   PawPrint,
   Loader2,
   ChefHat,
+  ShieldAlert,
+  Copy,
+  UtensilsCrossed,
+  Dog,
+  Cat,
+  Check,
 } from 'lucide-react';
 import { Recipe, speciesOptions, categoryOptions, difficultyOptions } from './RecipeModal';
+import { checkToxicIngredients, toxicTargetLabel } from './toxicIngredients';
 
 type RecipeDetailModalProps = {
   isOpen: boolean;
@@ -41,11 +49,21 @@ export default function RecipeDetailModal({
   const [liking, setLiking] = useState(false);
   const [localLiked, setLocalLiked] = useState(false);
   const [localCount, setLocalCount] = useState(0);
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [pets, setPets] = useState<any[]>([]);
+  const [feedingPetId, setFeedingPetId] = useState<number | null>(null);
+  const [feedMsg, setFeedMsg] = useState('');
 
   useEffect(() => {
     if (recipe) {
       setLocalLiked(!!recipe.is_liked);
       setLocalCount(recipe.likes_count || 0);
+      setCopied(false);
+      setFeedOpen(false);
+      setFeedMsg('');
+      setFeedingPetId(null);
     }
   }, [recipe]);
 
@@ -105,9 +123,71 @@ export default function RecipeDetailModal({
     }
   };
 
+  const toxic = checkToxicIngredients(recipe.ingredients, recipe.species);
+
+  const handleCopy = async () => {
+    setCopying(true);
+    try {
+      await recipeApi.create({
+        title: recipe.title,
+        species: recipe.species,
+        category: recipe.category,
+        difficulty: recipe.difficulty,
+        visibility: 'private',
+        description: recipe.description,
+        ingredients: recipe.ingredients,
+        instructions: recipe.instructions,
+        prepTimeMinutes: recipe.prep_time_minutes,
+        servings: recipe.servings,
+        caloriesPerServing: recipe.calories_per_serving,
+      });
+      setCopied(true);
+    } catch {
+      // silent fail
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const openFeed = async () => {
+    setFeedOpen((v) => !v);
+    if (pets.length === 0) {
+      try {
+        const data = await petApi.getAll();
+        setPets(data.pets || []);
+      } catch {}
+    }
+  };
+
+  const feedToPet = async (pet: any) => {
+    setFeedingPetId(pet.id);
+    setFeedMsg('');
+    try {
+      const res = await feedingLogApi.create({
+        petId: pet.id,
+        logDate: format(new Date(), 'yyyy-MM-dd'),
+        mealTime: format(new Date(), 'HH:mm'),
+        mealType: 'log',
+        foodName: `Domowa kuchnia: ${recipe.title}`,
+        calories: recipe.calories_per_serving || undefined,
+        notes: 'Posiłek z przepisu Petvio',
+      });
+      const warnings: string[] = res.dietWarnings || [];
+      setFeedMsg(
+        warnings.length > 0
+          ? `Zapisano dla ${pet.name}. ⚠ ${warnings.join(' ')}`
+          : `Zapisano posiłek dla ${pet.name} w dzienniku.`
+      );
+    } catch {
+      setFeedMsg('Nie udało się zapisać posiłku');
+    } finally {
+      setFeedingPetId(null);
+    }
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain bg-white rounded-3xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <div className="relative bg-gradient-to-br from-brand-dark via-brand to-emerald-800 rounded-t-3xl px-5 sm:px-8 pt-6 sm:pt-8 pb-6 text-white">
           <button
@@ -177,21 +257,93 @@ export default function RecipeDetailModal({
             <p className="text-sm text-gray-600 italic border-l-4 border-brand-dark/20 pl-4">{recipe.description}</p>
           )}
 
+          {toxic.length > 0 && (
+            <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 border border-red-200">
+              <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">
+                  Potencjalnie szkodliwe dla {toxicTargetLabel(recipe.species)}
+                </p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Wykryto: {toxic.join(', ')}. Zweryfikuj przepis — to dopasowanie tekstowe, nie diagnoza.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Składniki</p>
-            <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 whitespace-pre-line text-sm text-gray-700">
+            <div className="p-4 rounded-2xl bg-brand-mint/50 border border-brand-light/60 whitespace-pre-line text-sm text-gray-700">
               {recipe.ingredients}
             </div>
           </div>
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Przygotowanie</p>
-            <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 whitespace-pre-line text-sm text-gray-700">
+            <div className="p-4 rounded-2xl bg-brand-mint/50 border border-brand-light/60 whitespace-pre-line text-sm text-gray-700">
               {recipe.instructions}
             </div>
           </div>
 
           <p className="text-xs text-gray-400">Dodano {createdDate}</p>
+
+          {/* Podaj z przepisu — zapis do dziennika karmienia */}
+          <div className="pt-2 border-t border-gray-100">
+            <button
+              onClick={openFeed}
+              className="flex items-center gap-2 text-sm font-semibold text-brand-dark hover:text-brand transition-colors"
+            >
+              <UtensilsCrossed className="w-4 h-4" />
+              {feedOpen ? 'Zwiń wybór zwierzęcia' : 'Podaj dziś z tego przepisu'}
+            </button>
+            {feedOpen && (
+              <div className="mt-3">
+                <div className="flex gap-2 flex-wrap">
+                  {pets.length === 0 && <Loader2 className="w-4 h-4 animate-spin text-brand-dark" />}
+                  {pets.map((pet) => {
+                    const PetIcon = pet.species === 'cat' ? Cat : pet.species === 'dog' ? Dog : PawPrint;
+                    const mismatch = recipe.species !== 'both' && recipe.species !== pet.species;
+                    return (
+                      <button
+                        key={pet.id}
+                        onClick={() => feedToPet(pet)}
+                        disabled={feedingPetId !== null || mismatch}
+                        title={mismatch ? 'Przepis dla innego gatunku' : undefined}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-semibold border transition-all disabled:opacity-40 ${
+                          mismatch
+                            ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-dark hover:text-brand-dark'
+                        }`}
+                      >
+                        {feedingPetId === pet.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PetIcon className="w-3.5 h-3.5" />}
+                        {pet.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {feedMsg && (
+                  <p className={`text-xs mt-2 font-medium ${feedMsg.startsWith('Nie') ? 'text-red-600' : 'text-brand-dark'}`}>
+                    {feedMsg}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {!isOwner && recipe.visibility === 'public' && (
+            <button
+              onClick={handleCopy}
+              disabled={copying || copied}
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-full font-medium transition-all disabled:opacity-60 ${
+                copied
+                  ? 'bg-brand-mint text-brand-dark'
+                  : 'bg-white border-2 border-brand-dark text-brand-dark hover:bg-brand-mint/40'
+              }`}
+            >
+              {copying ? <Loader2 className="w-4 h-4 animate-spin" /> : copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Zapisano w moich przepisach' : 'Zapisz do moich przepisów'}
+            </button>
+          )}
 
           {isOwner && (
             <div className="flex gap-3 pt-2 border-t border-gray-100">
@@ -206,7 +358,7 @@ export default function RecipeDetailModal({
               {onEdit && (
                 <button
                   onClick={() => onEdit(recipe)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-brand-dark hover:bg-brand-dark text-white py-3 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all"
+                  className="flex-1 flex items-center justify-center gap-2 bg-brand-dark hover:bg-brand text-white py-3 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all"
                 >
                   <Pencil className="w-4 h-4" /> Edytuj przepis
                 </button>

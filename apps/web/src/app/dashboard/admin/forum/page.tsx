@@ -53,7 +53,7 @@ export default function AdminForumPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
             <PageHeader title="Posty forum" description="Moderuj posty na forum" />
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+      <div className="pv-card">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">

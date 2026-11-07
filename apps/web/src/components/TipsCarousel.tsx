@@ -47,35 +47,37 @@ export default function TipsCarousel() {
 
   return (
     <div
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+      className="pv-card overflow-hidden h-full"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="font-serif text-lg font-normal text-gray-900">Porady dla opiekunów</h3>
+      <div className="px-6 py-5 border-b border-gray-100/80 flex items-center justify-between">
+        <h3 className="pv-section-title">Porady dla opiekunów</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={prev}
-            className="w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:border-brand-dark hover:text-brand-dark transition-all flex items-center justify-center"
+            className="w-9 h-9 rounded-full border border-gray-200 text-gray-500 hover:border-brand-dark hover:text-brand-dark hover:bg-brand-mint active:scale-90 transition-all flex items-center justify-center"
             aria-label="Poprzednia porada"
           >
             ←
           </button>
           <button
             onClick={next}
-            className="w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:border-brand-dark hover:text-brand-dark transition-all flex items-center justify-center"
+            className="w-9 h-9 rounded-full border border-gray-200 text-gray-500 hover:border-brand-dark hover:text-brand-dark hover:bg-brand-mint active:scale-90 transition-all flex items-center justify-center"
             aria-label="Następna porada"
           >
             →
           </button>
         </div>
       </div>
-      <div className="p-6 min-h-[180px]">
-        <span className="inline-block px-3 py-1 rounded-full bg-brand-mint text-brand-dark text-xs font-semibold uppercase tracking-wide mb-3">
-          {tip.category}
-        </span>
-        <h4 className="font-serif text-xl font-normal text-gray-900 mb-2">{tip.title}</h4>
-        <p className="text-gray-600 leading-relaxed">{tip.text}</p>
+      <div className="p-6 min-h-[180px]" key={index}>
+        <div className="animate-slide-right">
+          <span className="inline-block px-3 py-1 rounded-full bg-brand-mint text-brand-dark text-xs font-bold uppercase tracking-wide mb-3">
+            {tip.category}
+          </span>
+          <h4 className="font-serif text-xl font-normal text-gray-900 mb-2">{tip.title}</h4>
+          <p className="text-gray-600 leading-relaxed">{tip.text}</p>
+        </div>
       </div>
       <div className="px-6 pb-5 flex items-center gap-1.5">
         {tips.map((_, i) => (

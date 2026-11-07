@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { walkApi, bloodAnalysisApi, userPreferencesApi } from '@/lib/api';
 import {
   DollarSign,
   Activity,
@@ -41,12 +42,54 @@ export default function Statistics() {
     const load = (key: string) => {
       try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
     };
+    // Budżet: serwer (per-konto) → fallback na mirror lokalny
     setExpenses(load('petExpenses'));
     setBudgets(load('petBudgets'));
-    setWalks(load('walkHistory'));
-    setActivities(load('activityHistory'));
+    userPreferencesApi
+      .get('budget_data')
+      .then((res: any) => {
+        if (res?.value) {
+          if (Array.isArray(res.value.expenses)) setExpenses(res.value.expenses);
+          if (Array.isArray(res.value.budgets)) setBudgets(res.value.budgets);
+        }
+      })
+      .catch(() => {});
     setInventory(load('inventoryItems'));
-    setBloodAnalyses(load('bloodAnalyses'));
+    userPreferencesApi
+      .get('inventory_items')
+      .then((res: any) => {
+        if (Array.isArray(res?.value)) setInventory(res.value);
+      })
+      .catch(() => {});
+
+    // Analizy krwi z API — localStorage był tylko do migracji i jest czyszczony
+    bloodAnalysisApi
+      .getAll()
+      .then((res: any) => setBloodAnalyses(res.analyses || res.bloodAnalyses || []))
+      .catch(() => setBloodAnalyses([]));
+
+    // Spacery: API (zrodlo prawdy) + lokalne wpisy offline z WalkTrackera.
+    // walkHistory zapisuje duration w SEKUNDACH i distance w METRACH -> normalizacja.
+    const localWalks = load('walkHistory').map((w: any) => ({
+      date: w.date,
+      duration: (Number(w.duration) || 0) / 60, // s -> min
+      distance: (Number(w.distance) || 0) / 1000, // m -> km
+      _key: `${w.date}|${w.duration}`,
+    }));
+    walkApi
+      .getAll()
+      .then((res: any) => {
+        const apiWalks = (res.walks || []).map((w: any) => ({
+          date: w.started_at,
+          duration: (w.duration_seconds || 0) / 60, // s -> min
+          distance: (w.distance_meters || 0) / 1000, // m -> km
+          _key: `${w.started_at}|${w.duration_seconds}`,
+        }));
+        const apiKeys = new Set(apiWalks.map((w: any) => w._key));
+        setWalks([...apiWalks, ...localWalks.filter((w: any) => !apiKeys.has(w._key))]);
+      })
+      .catch(() => setWalks(localWalks));
+    setActivities([]); // zrodlo fake — nic realnego nie zapisuje 'activityHistory'
   }, []);
 
   const rangeStart = useMemo(() => {
@@ -61,7 +104,10 @@ export default function Statistics() {
   const inRange = (dateStr: string) => new Date(dateStr) >= rangeStart;
 
   const filteredExpenses = useMemo(() => expenses.filter((e: any) => inRange(e.date)), [expenses, rangeStart]);
-  const filteredWalks = useMemo(() => walks.filter((w: any) => inRange(w.date)), [walks, rangeStart]);
+  const filteredWalks = useMemo(
+    () => walks.filter((w: any) => w.date && !Number.isNaN(new Date(w.date).getTime()) && inRange(w.date)),
+    [walks, rangeStart]
+  );
   const filteredActivities = useMemo(() => activities.filter((a: any) => inRange(a.date)), [activities, rangeStart]);
 
   const totalExpenses = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -286,10 +332,10 @@ export default function Statistics() {
   return (
     <div className="space-y-6">
       {/* Header & Time Range */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
+      <div className="pv-card p-5">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="pv-section-title flex items-center gap-2">
               <Activity className="w-5 h-5 text-brand-dark" />
               Statystyki
             </h2>
@@ -316,7 +362,7 @@ export default function Statistics() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map((stat, idx) => (
-          <div key={idx} className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5 flex items-center gap-4">
+          <div key={idx} className="pv-card p-5 flex items-center gap-4">
             <div className={`w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center ${stat.color}`}>
               <stat.icon className="w-6 h-6" />
             </div>
@@ -330,55 +376,58 @@ export default function Statistics() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5 text-brand-dark" />
             Wydatki w czasie
           </h3>
           <AreaChart data={expensesByPeriod} color="#1B6B4A" />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-brand-dark" />
             Podział wydatków
           </h3>
           <RadarChart data={expenseByCategory} color="#1B6B4A" />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <Clock className="w-5 h-5 text-brand-dark" />
             Dystans w czasie
           </h3>
           <StepChart data={walksByDay} color="#10b981" />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5 text-brand-dark" />
             Typy aktywności
           </h3>
           <RadarChart data={activityByType} color="#10b981" />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <Package className="w-5 h-5 text-brand-dark" />
             Stan magazynowy
           </h3>
           <WaffleChart data={inventoryByCategory} />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="pv-card p-5">
+          <h3 className="pv-section-title mb-4 flex items-center gap-2">
             <Heart className="w-5 h-5 text-brand-dark" />
             Zdrowie
           </h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-              <span className="text-sm text-gray-600">Analizy krwi</span>
-              <span className="font-semibold text-gray-900">{bloodAnalyses.length}</span>
+              <span className="text-sm text-gray-600">Analizy krwi w okresie</span>
+              <span className="font-semibold text-gray-900">
+                {bloodAnalyses.filter((a: any) => a.created_at && inRange(a.created_at)).length}
+                <span className="text-xs font-normal text-gray-400"> / {bloodAnalyses.length}</span>
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
               <span className="text-sm text-gray-600">Limity budżetu</span>

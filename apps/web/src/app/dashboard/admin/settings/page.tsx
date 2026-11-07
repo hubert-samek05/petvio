@@ -23,7 +23,7 @@ export default function AdminSettingsPage() {
     <div className="p-6 lg:p-8 space-y-6">
             <PageHeader title="Ustawienia" description="Konfiguracja systemu" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-lg bg-brand-light flex items-center justify-center">
               <Globe className="w-5 h-5 text-brand-dark" />
@@ -64,7 +64,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
               <Shield className="w-5 h-5 text-amber-600" />
@@ -111,7 +111,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-lg bg-brand-light flex items-center justify-center">
               <Bell className="w-5 h-5 text-brand-dark" />
@@ -140,7 +140,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-lg bg-brand-light flex items-center justify-center">
               <Palette className="w-5 h-5 text-brand-dark" />

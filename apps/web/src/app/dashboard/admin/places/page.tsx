@@ -111,7 +111,7 @@ export default function AdminPlacesPage() {
           </div>
         ) : (
           places.map((place) => (
-            <div key={place.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div key={place.id} className="pv-card p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">

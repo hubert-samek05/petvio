@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Quicksand, Fraunces } from "next/font/google";
 import "./globals.css";
 
@@ -18,6 +18,12 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Petvio - Kompleksowa aplikacja dla właścicieli zwierząt",
   description: "Wszystko czego potrzebujesz do opieki nad swoim pupilem w jednym miejscu",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

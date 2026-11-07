@@ -483,7 +483,7 @@ export default function Home() {
               { title: 'Zacznij śledzić', desc: 'Rozpocznij śledzenie spacerów i aktywności' },
               { title: 'Korzystaj z funkcji', desc: 'Odkryj wszystkie funkcje Petvio' },
             ].map((step, i) => (
-              <div key={step.title} className="relative bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-lg transition-shadow duration-300">
+              <div key={step.title} className="relative pv-card-hover p-6">
                 <div className="relative z-10 w-16 h-16 bg-brand-dark rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-brand-dark/20">
                   <span className="font-serif text-white text-2xl">{i + 1}</span>
                 </div>
@@ -531,7 +531,7 @@ export default function Home() {
                 quote: 'Kontakt z weterynarzem na czacie uratował nam niejedną nerwową noc. Polecam każdemu, kto poważnie traktuje zdrowie swojego pupila.',
               },
             ].map((t) => (
-              <div key={t.name} className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+              <div key={t.name} className="pv-card p-8">
                 <div className="flex text-amber-400 text-sm mb-4">★★★★★</div>
                 <p className="text-gray-600 leading-relaxed mb-6">&ldquo;{t.quote}&rdquo;</p>
                 <div className="flex items-center gap-3">
@@ -635,8 +635,7 @@ export default function Home() {
           <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-gray-400 text-sm">© 2026 Petvio. Wszystkie prawa zastrzeżone.</p>
             <div className="flex items-center gap-5 text-gray-400">
-              <a href="#" className="hover:text-brand-dark transition-colors text-sm">Regulamin</a>
-              <a href="#" className="hover:text-brand-dark transition-colors text-sm">Polityka prywatności</a>
+              <Link href="/polityka-prywatnosci" className="hover:text-brand-dark transition-colors text-sm">Polityka prywatności</Link>
             </div>
           </div>
         </div>

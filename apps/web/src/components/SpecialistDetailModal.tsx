@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { X, Phone, Mail, Globe, MapPin, Navigation, Dog, Cat, Brain, GraduationCap, Heart, HeartHandshake } from 'lucide-react';
+import { X, Phone, Mail, Globe, MapPin, Navigation, Dog, Cat, Brain, GraduationCap, Heart, HeartHandshake, Apple, Hotel, UserCheck } from 'lucide-react';
 
 interface Specialist {
   id: number;
@@ -29,18 +29,33 @@ const typeLabels: Record<string, string> = {
   behaviorist: 'Behawiorysta',
   trainer: 'Trener',
   zoopsychologist: 'Zoopsycholog',
+  dietitian: 'Dietetyk',
+  hotel: 'Hotel',
+  petsitter: 'Petsitter',
 };
 
 const typeIcons: Record<string, any> = {
   behaviorist: Brain,
   trainer: GraduationCap,
   zoopsychologist: Heart,
+  dietitian: Apple,
+  hotel: Hotel,
+  petsitter: UserCheck,
 };
 
-const typeColors: Record<string, string> = {
-  behaviorist: 'bg-red-50 text-red-700 border-red-200',
-  trainer: 'bg-brand-dark/10 text-brand-dark border-brand-dark/20',
-  zoopsychologist: 'bg-brand-mint text-purple-700 border-purple-200',
+const typeBadge = 'bg-brand-mint text-brand-dark border-emerald-200';
+
+// Dozwolone tylko http(s) — zgłoszenia użytkowników nie mogą podawać javascript: itp.
+const safeWebsiteUrl = (url: string | null) => {
+  if (!url) return null;
+  const u = url.trim();
+  const withProto = /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  try {
+    const parsed = new URL(withProto);
+    return ['http:', 'https:'].includes(parsed.protocol) ? withProto : null;
+  } catch {
+    return null;
+  }
 };
 
 export default function SpecialistDetailModal({ specialist, onClose }: SpecialistDetailModalProps) {
@@ -48,12 +63,17 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
       document.body.classList.remove('modal-open');
     };
-  }, []);
+  }, [onClose]);
 
   const Icon = typeIcons[specialist.specialist_type] || HeartHandshake;
 
@@ -65,8 +85,8 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-fade-in p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <h3 className="font-semibold text-gray-900">Szczegóły specjalisty</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
@@ -76,17 +96,17 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
 
         <div className="p-5 space-y-5">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-dark to-brand flex items-center justify-center text-white flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-brand-mint flex items-center justify-center text-brand-dark flex-shrink-0">
               <Icon className="w-8 h-8" />
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-lg font-semibold text-gray-900">{specialist.name}</h4>
+              <h4 className="pv-section-title">{specialist.name}</h4>
               <p className="text-sm text-gray-500">{typeLabels[specialist.specialist_type] || specialist.specialist_type}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full border ${typeColors[specialist.specialist_type]}`}>
+            <span className={`inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full border ${typeBadge}`}>
               {typeLabels[specialist.specialist_type] || specialist.specialist_type}
             </span>
             <span className="inline-flex items-center gap-1 text-xs text-gray-400">
@@ -139,8 +159,8 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
                   <Mail className="w-4 h-4" /> Email
                 </a>
               )}
-              {specialist.website && (
-                <a href={specialist.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 text-gray-700 hover:bg-brand-dark/10 hover:text-brand-dark transition-all text-sm font-medium">
+              {safeWebsiteUrl(specialist.website) && (
+                <a href={safeWebsiteUrl(specialist.website)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 text-gray-700 hover:bg-brand-dark/10 hover:text-brand-dark transition-all text-sm font-medium">
                   <Globe className="w-4 h-4" /> Strona
                 </a>
               )}
@@ -150,7 +170,7 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
           {specialist.latitude && specialist.longitude && (
             <button
               onClick={openNavigation}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl pv-btn-primary"
             >
               <Navigation className="w-4 h-4" /> Nawiguj w Google Maps
             </button>

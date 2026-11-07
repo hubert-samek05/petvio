@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-react';
 import { calendarApi } from '@/lib/api';
 
+const maxEventDate = `${new Date().getFullYear() + 10}-12-31`;
+
 const TYPE_LABELS: Record<string, string> = {
   vaccination: 'Szczepienie',
   medication: 'Lek',
@@ -15,16 +17,27 @@ const TYPE_LABELS: Record<string, string> = {
 
 const TYPE_COLORS: Record<string, string> = {
   vaccination: '#1B6B4A',
-  medication: '#2A8A5C',
-  deworming: '#3D9A6A',
-  visit: '#0F3D2E',
+  medication: '#3B82F6',
+  deworming: '#F59E0B',
+  visit: '#8B5CF6',
   other: '#9CA3AF',
+};
+
+export type EditingEvent = {
+  id: number;
+  petId: number;
+  eventType: string;
+  eventDate: string;
+  title: string;
+  description: string;
+  reminderEnabled: boolean;
 };
 
 type CalendarEventModalProps = {
   isOpen: boolean;
   pets: any[];
   initialDate?: string;
+  editingEvent?: EditingEvent;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -33,6 +46,7 @@ export default function CalendarEventModal({
   isOpen,
   pets,
   initialDate,
+  editingEvent,
   onClose,
   onSaved,
 }: CalendarEventModalProps) {
@@ -49,15 +63,25 @@ export default function CalendarEventModal({
   const [error, setError] = useState('');
 
   const initialForm = useMemo(
-    () => ({
-      petId: pets[0]?.id?.toString() || '',
-      eventType: 'other',
-      eventDate: initialDate || '',
-      title: '',
-      description: '',
-      reminderEnabled: true,
-    }),
-    [pets, initialDate]
+    () =>
+      editingEvent
+        ? {
+            petId: String(editingEvent.petId),
+            eventType: TYPE_LABELS[editingEvent.eventType] ? editingEvent.eventType : 'other',
+            eventDate: editingEvent.eventDate,
+            title: editingEvent.title,
+            description: editingEvent.description,
+            reminderEnabled: editingEvent.reminderEnabled,
+          }
+        : {
+            petId: pets[0]?.id?.toString() || '',
+            eventType: 'other',
+            eventDate: initialDate || '',
+            title: '',
+            description: '',
+            reminderEnabled: true,
+          },
+    [pets, initialDate, editingEvent]
   );
 
   useEffect(() => {
@@ -119,15 +143,20 @@ export default function CalendarEventModal({
   const handleSubmit = async () => {
     setSaving(true);
     setError('');
+    const payload = {
+      petId: Number(form.petId),
+      eventType: form.eventType,
+      eventDate: form.eventDate,
+      title: form.title.trim(),
+      description: form.description.trim(),
+      reminderEnabled: form.reminderEnabled,
+    };
     try {
-      await calendarApi.create({
-        petId: Number(form.petId),
-        eventType: form.eventType,
-        eventDate: form.eventDate,
-        title: form.title.trim(),
-        description: form.description.trim(),
-        reminderEnabled: form.reminderEnabled,
-      });
+      if (editingEvent) {
+        await calendarApi.update(editingEvent.id, payload);
+      } else {
+        await calendarApi.create(payload);
+      }
       onSaved();
       onClose();
     } catch (err: any) {
@@ -143,15 +172,17 @@ export default function CalendarEventModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain">
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative bg-white rounded-[28px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain animate-scale-in">
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm px-5 sm:px-8 pt-6 sm:pt-8 pb-4 rounded-t-3xl z-10">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide mb-1 text-brand-dark">
                 Kalendarz zdrowia
               </p>
-              <h2 className="text-2xl font-semibold text-gray-900">Dodaj termin</h2>
+              <h2 className="text-2xl font-semibold text-gray-900">
+                {editingEvent ? 'Edytuj termin' : 'Dodaj termin'}
+              </h2>
             </div>
             <button
               onClick={onClose}
@@ -244,6 +275,8 @@ export default function CalendarEventModal({
                   <input
                     type="date"
                     value={form.eventDate}
+                    min="1990-01-01"
+                    max={maxEventDate}
                     onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
                     className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
                   />
@@ -287,7 +320,7 @@ export default function CalendarEventModal({
                 </label>
               </WizardField>
 
-              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+              <div className="p-5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Podsumowanie</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -319,7 +352,7 @@ export default function CalendarEventModal({
             {step > 1 && (
               <button
                 onClick={prevStep}
-                className="px-8 py-3.5 rounded-full border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                className="px-8 py-3.5 rounded-full pv-btn-ghost flex items-center justify-center gap-2"
               >
                 <ChevronLeft className="w-4 h-4" /> Wstecz
               </button>
@@ -327,7 +360,7 @@ export default function CalendarEventModal({
             {step < 3 ? (
               <button
                 onClick={nextStep}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
               >
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
@@ -335,9 +368,9 @@ export default function CalendarEventModal({
               <button
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50"
               >
-                {saving ? 'Zapisywanie...' : 'Dodaj termin'}
+                {saving ? 'Zapisywanie...' : editingEvent ? 'Zapisz zmiany' : 'Dodaj termin'}
               </button>
             )}
           </div>
@@ -361,7 +394,7 @@ function WizardField({
 }) {
   return (
     <div
-      className={`p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
+      className={`p-5 pv-card shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
         full ? 'sm:col-span-2' : ''
       }`}
     >

@@ -1,505 +1,327 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { petApi, herbalAdvisorApi, userPreferencesApi } from '@/lib/api';
 import {
-  Leaf,
-  Search,
-  Plus,
-  X,
-  Check,
-  AlertCircle,
-  Info,
-  Heart,
-  Sparkles,
-  BookOpen,
-  MessageCircle,
-  ChevronRight,
-  Star,
-  Clock,
-  Shield
+  Leaf, Search, ChevronRight, X, Check, AlertTriangle,
+  BookOpen, Heart, Trash2, Plus, Cat, Dog, Sparkles, Clock,
+  Send, Loader2, Bot, User, RotateCcw,
 } from 'lucide-react';
+import {
+  HERBS, RECIPES, CATEGORIES, SPECIES_EMOJI, HERB_EMOJI, HERB_IMAGES,
+  Herb, SavedHerb, HerbCategory,
+} from './herbalData';
 
-interface Herb {
-  id: string;
-  name: string;
-  latinName: string;
-  category: 'digestive' | 'immune' | 'calming' | 'skin' | 'joints' | 'respiratory' | 'other';
-  benefits: string[];
-  usageFor: ('dog' | 'cat' | 'both')[];
-  dosage: string;
-  warnings: string[];
-  preparations: string[];
-  description: string;
-  activeCompounds: string[];
-  safetyRating: number;
-}
-
-interface Recipe {
-  id: string;
-  name: string;
-  herbs: string[];
-  purpose: string;
-  preparation: string;
-  dosage: string;
-  duration: string;
-}
-
-interface SavedHerb {
-  id: string;
-  herbId: string;
-  herbName: string;
-  petId: string;
-  petName: string;
-  startDate: string;
-  notes?: string;
-}
-
-const categories = [
-  { id: 'all', name: 'Wszystkie', icon: Leaf },
-  { id: 'digestive', name: 'Trawienie', icon: Heart },
-  { id: 'immune', name: 'Odporność', icon: Shield },
-  { id: 'calming', name: 'Uspokajające', icon: Sparkles },
-  { id: 'skin', name: 'Skóra', icon: Star },
-  { id: 'joints', name: 'Stawy', icon: Info },
-  { id: 'respiratory', name: 'Oddechowe', icon: AlertCircle },
-];
-
-const herbsDatabase: Herb[] = [
-  {
-    id: '1',
-    name: 'Rumianek',
-    latinName: 'Matricaria chamomilla',
-    category: 'digestive',
-    benefits: [
-      'Łagodzi problemy trawienne',
-      'Działa przeciwzapalnie',
-      'Uspokaja podrażnioną skórę',
-      'Pomaga przy zapaleniu spojówek'
-    ],
-    usageFor: ['both'],
-    dosage: '1 łyżeczka suszu na szklankę wody, 2-3 razy dziennie',
-    warnings: ['Unikać u zwierząt z alergią na rośliny złożone', 'Nie stosować długotrwale'],
-    preparations: ['Napar', 'Kompres', 'Płukanka'],
-    description: 'Rumianek to jedno z najbezpieczniejszych ziół dla zwierząt. Działa łagodząco na układ trawienny i pomaga w stanach zapalnych.',
-    activeCompounds: ['Apigenina', 'Bisabolol', 'Chamazulen'],
-    safetyRating: 5,
-  },
-  {
-    id: '2',
-    name: 'Kurkuma',
-    latinName: 'Curcuma longa',
-    category: 'joints',
-    benefits: [
-      'Silne działanie przeciwzapalne',
-      'Wspiera zdrowiestawów',
-      'Wspomaga trawienie',
-      'Właściwości przeciwutleniające'
-    ],
-    usageFor: ['both'],
-    dosage: '1/4 łyżeczki na 5kg masy ciała dziennie',
-    warnings: ['Nie stosować u zwierząt z problemami z żółcią', 'Może wchodzić w interakcje z lekami'],
-    preparations: ['Proszek dodany do pokarmu', 'Pasta kurkumowa', 'Napar'],
-    description: 'Kurkuma zawiera kurkuminę - potężny związek przeciwzapalny. Szczególnie pomocna przy problemach zestawami i zapaleniach.',
-    activeCompounds: ['Kurkumina', 'Demethoksykurkumina', 'Bisdemethoksykurkumina'],
-    safetyRating: 4,
-  },
-  {
-    id: '3',
-    name: 'Waleriana',
-    latinName: 'Valeriana officinalis',
-    category: 'calming',
-    benefits: [
-      'Silne działanie uspokajające',
-      'Pomaga przy lęku separacyjnym',
-      'Wspomaga sen',
-      'Łagodzi stres'
-    ],
-    usageFor: ['both'],
-    dosage: 'Według wskazań weterynarza - zazwyczaj 1-2 krople nalewki na kg masy ciała',
-    warnings: ['Nie łączyć z innymi środkami uspokajającymi', 'Może powodować senność', 'Konsultacja z weterynarzem obowiązkowa'],
-    preparations: ['Nalewka', 'Kapsułki', 'Napar'],
-    description: 'Waleriana to naturalne uspokajające dla zwierząt. Pomaga w sytuacjach stresowych jak burze, fajerwerki czy wizyty u weterynarza.',
-    activeCompounds: ['Kwas walerianowy', 'Walepotriaты', 'Alkaloidy'],
-    safetyRating: 3,
-  },
-  {
-    id: '4',
-    name: 'Pokrzywa',
-    latinName: 'Urtica dioica',
-    category: 'immune',
-    benefits: [
-      'Wzmacnia odporność',
-      'Bogata w witaminy i minerały',
-      'Wspomaga zdrowie skóry',
-      'Działa oczyszczająco'
-    ],
-    usageFor: ['both'],
-    dosage: '1 łyżeczka suszu na szklankę wody, 1-2 razy dziennie',
-    warnings: ['Może wchodzić w interakcje z lekami na ciśnienie', 'Nie stosować u ciężarnych samic'],
-    preparations: ['Napar', 'Proszek', 'Świeże liście (po obróbce)'],
-    description: 'Pokrzywa to prawdziwa skarbnica składników odżywczych. Wspiera ogólną kondycję organizmu i wzmacnia odporność.',
-    activeCompounds: ['Żelazo', 'Witamina C', 'Chlorofil', 'Flawonoidy'],
-    safetyRating: 5,
-  },
-  {
-    id: '5',
-    name: 'Mniszek lekarski',
-    latinName: 'Taraxacum officinale',
-    category: 'digestive',
-    benefits: [
-      'Wspomaga pracę wątroby',
-      'Działa moczopędnie',
-      'Poprawia trawienie',
-      'Bogaty w witaminy'
-    ],
-    usageFor: ['both'],
-    dosage: '1/2 łyżeczki suszu na szklankę wody, 1-2 razy dziennie',
-    warnings: ['Nie stosować u zwierząt z problemami z żółcią', 'Może obniżać poziom cukru'],
-    preparations: ['Napar z liści', 'Napar z korzenia', 'Świeże liście'],
-    description: 'Mniszek wspiera detoksykację organizmu i poprawia funkcjonowanie układu trawiennego. Bezpieczny dla większości zwierząt.',
-    activeCompounds: ['Inulina', 'Taraksacyna', 'Witaminy A, C, K'],
-    safetyRating: 5,
-  },
-  {
-    id: '6',
-    name: 'Echinacea',
-    latinName: 'Echinacea purpurea',
-    category: 'immune',
-    benefits: [
-      'Wzmacnia system immunologiczny',
-      'Skraca czas trwania infekcji',
-      'Działa przeciwbakteryjnie',
-      'Wspomaga gojenie ran'
-    ],
-    usageFor: ['both'],
-    dosage: 'Według wskazań weterynarza - zazwyczaj kuracja 7-10 dni',
-    warnings: ['Nie stosować długotrwale', 'Unikać u zwierząt z chorobami autoimmunologicznymi'],
-    preparations: ['Nalewka', 'Kapsułki', 'Napar'],
-    description: 'Echinacea to potężny immunomodulator. Najlepiej działa w krótkich kuracjach podczas infekcji lub w okresach zwiększonego ryzyka.',
-    activeCompounds: ['Echinakozyd', 'Polisacharydy', 'Alkiloamidy'],
-    safetyRating: 4,
-  }
-];
-
-const recipes: Recipe[] = [
-  {
-    id: '1',
-    name: 'Mieszanka na trawienie',
-    herbs: ['Rumianek', 'Mniszek lekarski', 'Pokrzywa'],
-    purpose: 'Wspomaga trawienie i łagodzi dolegliwości żołądkowe',
-    preparation: 'Zmieszać zioła w równych proporcjach. 1 łyżeczkę mieszanki zalać szklanką wrzątku, zaparzać 10 minut.',
-    dosage: '2-3 łyżki naparu 2 razy dziennie',
-    duration: '7-14 dni',
-  },
-  {
-    id: '2',
-    name: 'Wsparcie odporności',
-    herbs: ['Echinacea', 'Pokrzywa'],
-    purpose: 'Wzmacnia system immunologiczny w okresach zwiększonego ryzyka infekcji',
-    preparation: 'Przygotować napar z każdego zioła osobno. Połączyć w proporcji 1:1.',
-    dosage: '1-2 łyżki naparu dziennie',
-    duration: '7-10 dni, z przerwami',
-  },
-  {
-    id: '3',
-    name: 'Uspokajająca mieszanka',
-    herbs: ['Rumianek', 'Waleriana'],
-    purpose: 'Łagodzi stres i niepokój, pomaga w relaksacji',
-    preparation: 'Rumianek i waleriana w proporcji 3:1. Zaparzać 15 minut.',
-    dosage: '1-2 łyżki naparu przed sytuacją stresową',
-    duration: 'Doraźnie, według potrzeb',
-  }
-];
+type Tab = 'herbs' | 'recipes' | 'saved' | 'advisor';
 
 export default function HerbalMedicine() {
-  const [activeTab, setActiveTab] = useState<'herbs' | 'recipes' | 'saved' | 'ai'>('herbs');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [tab, setTab] = useState<Tab>('herbs');
+  const [selectedCategory, setSelectedCategory] = useState<HerbCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHerb, setSelectedHerb] = useState<Herb | null>(null);
+
+  const [pets, setPets] = useState<any[]>([]);
+  const [petsError, setPetsError] = useState(false);
   const [savedHerbs, setSavedHerbs] = useState<SavedHerb[]>([]);
+  const [savedError, setSavedError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
+  const [addHerbId, setAddHerbId] = useState('');
+  const [addPetId, setAddPetId] = useState('');
+  const [addNotes, setAddNotes] = useState('');
+  const [addDate, setAddDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  type ChatMessage = { role: 'user' | 'assistant'; content: string };
+  const [chatPetId, setChatPetId] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (selectedHerb || showAddModal) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-      document.body.classList.add('modal-open');
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      document.body.classList.remove('modal-open');
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, chatLoading]);
+
+  const sendChatMessage = async (text?: string) => {
+    const content = (text ?? chatInput).trim();
+    if (!content || chatLoading) return;
+    const nextMessages: ChatMessage[] = [...chatMessages, { role: 'user', content }];
+    setChatMessages(nextMessages);
+    setChatInput('');
+    setChatError('');
+    setChatLoading(true);
+    try {
+      const res = await herbalAdvisorApi.ask({
+        message: content,
+        petId: chatPetId || undefined,
+        history: nextMessages.slice(0, -1).slice(-10),
+      });
+      setChatMessages([...nextMessages, { role: 'assistant', content: res.reply }]);
+    } catch (e: any) {
+      setChatError(e?.response?.data?.error?.message || 'Nie udało się połączyć z doradcą AI. Spróbuj ponownie.');
     }
-    return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      document.body.classList.remove('modal-open');
-    };
-  }, [selectedHerb, showAddModal]);
+    setChatLoading(false);
+  };
+
+  const resetChat = () => { setChatMessages([]); setChatError(''); };
 
   useEffect(() => {
-    const saved = localStorage.getItem('savedHerbs');
-    if (saved) {
-      setSavedHerbs(JSON.parse(saved));
-    }
+    petApi.getAll().then((res) => {
+      const list = res.pets || res || [];
+      setPets(list);
+      if (list.length > 0) { setAddPetId(String(list[0].id)); setChatPetId(String(list[0].id)); }
+    }).catch(() => setPetsError(true));
+    (async () => {
+      let serverList: SavedHerb[] = [];
+      try {
+        const res = await userPreferencesApi.get('saved_herbs');
+        if (Array.isArray(res.value)) serverList = res.value;
+      } catch {}
+      try {
+        const legacy = JSON.parse(localStorage.getItem('savedHerbs') || '[]');
+        if (Array.isArray(legacy) && legacy.length && serverList.length === 0) {
+          serverList = legacy;
+          userPreferencesApi.set('saved_herbs', legacy).catch(() => {});
+        }
+        localStorage.removeItem('savedHerbs');
+      } catch {}
+      setSavedHerbs(serverList);
+    })();
   }, []);
 
-  const filteredHerbs = herbsDatabase.filter(herb => {
-    if (selectedCategory !== 'all' && herb.category !== selectedCategory) return false;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      if (!herb.name.toLowerCase().includes(query) &&
-          !herb.latinName.toLowerCase().includes(query) &&
-          !herb.description.toLowerCase().includes(query)) {
-        return false;
-      }
-    }
-    return true;
+  const persistSaved = (list: SavedHerb[]) => {
+    setSavedHerbs(list);
+    setSavedError('');
+    userPreferencesApi.set('saved_herbs', list).catch(() => setSavedError('Nie udało się zapisać zmiany na serwerze. Spróbuj ponownie.'));
+  };
+
+  const openAddModal = (herbId?: string) => {
+    setAddHerbId(herbId || HERBS[0].id);
+    setAddDate(new Date().toISOString().slice(0, 10));
+    setAddNotes('');
+    setShowAddModal(true);
+  };
+
+  const confirmAdd = () => {
+    const herb = HERBS.find((h) => h.id === addHerbId);
+    const pet = pets.find((p) => String(p.id) === addPetId);
+    if (!herb || !pet) return;
+    const entry: SavedHerb = {
+      id: `${Date.now()}`, herbId: herb.id, herbName: herb.name,
+      petId: String(pet.id), petName: pet.name, startDate: addDate, notes: addNotes.trim() || undefined,
+    };
+    persistSaved([entry, ...savedHerbs]);
+    setShowAddModal(false);
+  };
+
+  const removeSaved = (id: string) => persistSaved(savedHerbs.filter((s) => s.id !== id));
+
+  const filteredHerbs = HERBS.filter((h) => {
+    const catOk = selectedCategory === 'all' || h.category === selectedCategory;
+    const q = searchQuery.toLowerCase();
+    const qOk = !q || h.name.toLowerCase().includes(q) || h.benefits.some((b) => b.toLowerCase().includes(q));
+    return catOk && qOk;
   });
 
-  const handleAskAI = () => {
-    if (!aiQuestion) return;
-    
-    // Symulacja odpowiedzi AI
-    setTimeout(() => {
-      setAiResponse(`Na podstawie Twojego pytania: "${aiQuestion}"\n\nZalecam skonsultowanie się z weterynarzem przed zastosowaniem jakichkolwiek ziół. Ogólnie rzecz biorąc, zioła takie jak rumianek i pokrzywa są bezpieczne dla większości zwierząt, ale zawsze należy dostosować dawkowanie do wagi i stanu zdrowia pupila.\n\nPamiętaj:\n• Zawsze zaczynaj od małych dawek\n• Obserwuj reakcję zwierzęcia\n• Nie łącz ziół z lekami bez konsultacji\n• W razie wątpliwości skontaktuj się z weterynarzem`);
-    }, 1000);
+  const daysSince = (date: string) => Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000));
+
+  const HerbImage = ({ herb, className, emojiSize }: { herb: Herb; className: string; emojiSize?: string }) => {
+    const [err, setErr] = useState(false);
+    const src = HERB_IMAGES[herb.id];
+    return (
+      <span className={`${className} rounded-xl overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 flex items-center justify-center flex-shrink-0 ${emojiSize || 'text-xl'}`}>
+        {src && !err ? (
+          <img src={src} alt={herb.name} className="w-full h-full object-cover" loading="lazy" onError={() => setErr(true)} />
+        ) : (
+          HERB_EMOJI[herb.id] || '🌿'
+        )}
+      </span>
+    );
   };
+
+  const SpeciesIcons = ({ usageFor }: { usageFor: Herb['usageFor'] }) => (
+    <div className="flex items-center gap-1">
+      {(usageFor.includes('both') || usageFor.includes('dog')) && <Dog className="w-3.5 h-3.5 text-gray-400" />}
+      {(usageFor.includes('both') || usageFor.includes('cat')) && <Cat className="w-3.5 h-3.5 text-gray-400" />}
+    </div>
+  );
+
+  const HerbCard = ({ herb }: { herb: Herb }) => (
+    <button onClick={() => setSelectedHerb(herb)} className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-gray-50/60 active:bg-gray-50 transition-all">
+      <HerbImage herb={herb} className="w-11 h-11" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-gray-900 text-sm truncate">{herb.name}</p>
+          <SpeciesIcons usageFor={herb.usageFor} />
+        </div>
+        <p className="text-[11px] text-gray-400 italic truncate">{herb.latinName}</p>
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {herb.benefits.slice(0, 2).map((b, i) => (
+            <span key={i} className="px-1.5 py-0.5 rounded-md bg-brand-light text-brand-dark text-[10px] font-medium">{b}</span>
+          ))}
+        </div>
+      </div>
+      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+    </button>
+  );
 
   return (
     <div className="space-y-5">
-      {/* Warning Banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-amber-900 mb-1">Ważne!</h3>
-            <p className="text-sm text-amber-700">
-              Informacje zawarte w tej sekcji mają charakter edukacyjny. Przed zastosowaniem jakichkolwiek ziół u swojego pupila, skonsultuj się z weterynarzem.
-            </p>
-          </div>
-        </div>
+      <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 flex items-start gap-2.5">
+        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-amber-800 leading-relaxed">
+          Informacje mają charakter edukacyjny i nie zastępują konsultacji z weterynarzem. Przed podaniem jakiegokolwiek zioła skonsultuj dawkowanie, zwłaszcza u kotów, szczeniąt, zwierząt ciężarnych lub przyjmujących leki.
+        </p>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-2">
-        <div className="grid grid-cols-4 gap-2">
+      {/* Taby */}
+      <div className="flex gap-1 p-1 rounded-2xl bg-gray-100/80">
+        {([
+          { key: 'herbs', label: 'Zioła', Icon: Leaf },
+          { key: 'recipes', label: 'Przepisy', Icon: BookOpen },
+          { key: 'saved', label: 'Zapisane', Icon: Heart },
+          { key: 'advisor', label: 'Doradca', Icon: Sparkles },
+        ] as { key: Tab; label: string; Icon: any }[]).map(({ key, label, Icon }) => (
           <button
-            onClick={() => setActiveTab('herbs')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'herbs'
-                ? 'bg-brand-dark text-white'
-                : 'text-gray-600 hover:bg-gray-50'
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              tab === key ? 'bg-white shadow-sm text-brand-dark' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <Leaf className="w-5 h-5" />
-            <span className="hidden sm:inline">Baza ziół</span>
+            <Icon className="w-4 h-4" />
+            <span>{label}</span>
           </button>
-          <button
-            onClick={() => setActiveTab('recipes')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'recipes'
-                ? 'bg-brand-dark text-white'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <BookOpen className="w-5 h-5" />
-            <span className="hidden sm:inline">Przepisy</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('saved')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'saved'
-                ? 'bg-brand-dark text-white'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <Heart className="w-5 h-5" />
-            <span className="hidden sm:inline">Zapisane</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('ai')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'ai'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <Sparkles className="w-5 h-5" />
-            <span className="hidden sm:inline">AI Asystent</span>
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Herbs Tab */}
-      {activeTab === 'herbs' && (
-        <>
-          {/* Categories */}
-          <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {categories.map((cat) => {
-                const Icon = cat.icon;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-all border font-medium ${
-                      selectedCategory === cat.id
-                        ? 'bg-brand-dark text-white border-brand-dark'
-                        : 'bg-white text-gray-700 border-gray-200 hover:border-brand-dark/40'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {cat.name}
-                  </button>
-                );
-              })}
-            </div>
+      {/* TAB: ZIOŁA */}
+      {tab === 'herbs' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Szukaj ziół: trawienie, stres, stawy…"
+              className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm shadow-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            />
           </div>
 
-          {/* Search */}
-          <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Szukaj ziół po nazwie, właściwościach..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-11 pr-4 py-3 font-medium focus:outline-none focus:border-brand-dark focus:bg-white transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Herbs Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredHerbs.map((herb) => (
-              <div
-                key={herb.id}
-                onClick={() => setSelectedHerb(herb)}
-                className="bg-white rounded-2xl border border-gray-200/70 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-brand-dark/30 transition-all duration-300 overflow-hidden cursor-pointer"
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedCategory === cat.id ? 'bg-brand-dark text-white' : 'bg-white text-gray-600 border border-gray-200'
+                }`}
               >
-                <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
-                
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-1">{herb.name}</h3>
-                      <p className="text-sm text-gray-500 italic">{herb.latinName}</p>
-                    </div>
-                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100">
-                      <Star className="w-4 h-4 text-amber-600 fill-current" />
-                      <span className="text-sm font-semibold text-amber-700">{herb.safetyRating}/5</span>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-700 line-clamp-2 mb-3">{herb.description}</p>
-
-                  <div className="space-y-2 mb-3">
-                    <div className="text-xs font-semibold text-gray-900">Główne korzyści:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {herb.benefits.slice(0, 2).map((benefit, idx) => (
-                        <span key={idx} className="px-2 py-1 rounded-lg bg-brand-light text-brand-dark text-xs">
-                          {benefit}
-                        </span>
-                      ))}
-                      {herb.benefits.length > 2 && (
-                        <span className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-xs">
-                          +{herb.benefits.length - 2}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                    <span className="text-xs text-gray-500">
-                      {herb.usageFor.includes('both') ? 'Psy i koty' : herb.usageFor.join(', ')}
-                    </span>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </div>
-              </div>
+                <cat.icon className="w-3.5 h-3.5" /> {cat.name}
+              </button>
             ))}
           </div>
-        </>
+
+          <div className="pv-card overflow-hidden divide-y divide-gray-100">
+            {filteredHerbs.map((herb) => <HerbCard key={herb.id} herb={herb} />)}
+            {filteredHerbs.length === 0 && (
+              <div className="p-8 text-center text-sm text-gray-400">Brak ziół pasujących do wyszukiwania</div>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* Recipes Tab */}
-      {activeTab === 'recipes' && (
-        <div className="space-y-4">
-          {recipes.map((recipe) => (
-            <div
-              key={recipe.id}
-              className="bg-white rounded-2xl border border-gray-200/70 shadow-sm hover:shadow-lg transition-all p-6"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{recipe.name}</h3>
-                  <p className="text-gray-600">{recipe.purpose}</p>
+      {/* TAB: PRZEPISY */}
+      {tab === 'recipes' && (
+        <div className="space-y-3.5 animate-fade-in">
+          {RECIPES.map((recipe) => (
+            <div key={recipe.id} className="pv-card p-4">
+              <div className="flex items-start justify-between gap-2 mb-2.5">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-gray-900 text-sm">{recipe.name}</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{recipe.purpose}</p>
                 </div>
-                <BookOpen className="w-6 h-6 text-brand-dark" />
+                <span className="w-9 h-9 rounded-xl bg-brand-mint flex items-center justify-center flex-shrink-0">
+                  <BookOpen className="w-4 h-4 text-brand-dark" />
+                </span>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900 mb-2">Zioła:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {recipe.herbs.map((herb, idx) => (
-                      <span key={idx} className="px-3 py-1.5 rounded-lg bg-brand-light text-brand-dark text-sm font-medium">
-                        {herb}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {recipe.herbIds.map((hid) => {
+                  const h = HERBS.find((x) => x.id === hid);
+                  if (!h) return null;
+                  return (
+                    <button key={hid} onClick={() => setSelectedHerb(h)} className="px-2.5 py-1 rounded-full bg-brand-light text-brand-dark text-[11px] font-semibold active:scale-95 transition-all">
+                      {h.name}
+                    </button>
+                  );
+                })}
+              </div>
 
-                <div>
-                  <div className="text-sm font-semibold text-gray-900 mb-2">Przygotowanie:</div>
-                  <p className="text-sm text-gray-700">{recipe.preparation}</p>
-                </div>
+              <p className="text-xs text-gray-600 bg-gray-50 rounded-xl p-3 mb-3 leading-relaxed">{recipe.preparation}</p>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900 mb-1">Dawkowanie:</div>
-                    <p className="text-sm text-gray-600">{recipe.dosage}</p>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900 mb-1">Czas kuracji:</div>
-                    <p className="text-sm text-gray-600">{recipe.duration}</p>
-                  </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-50 rounded-xl p-2.5">
+                  <p className="text-[10px] font-bold uppercase text-gray-400">Dawkowanie</p>
+                  <p className="text-xs text-gray-700 mt-0.5">{recipe.dosage}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-2.5">
+                  <p className="text-[10px] font-bold uppercase text-gray-400">Czas kuracji</p>
+                  <p className="text-xs text-gray-700 mt-0.5">{recipe.duration}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
       )}
+      {/* TAB: ZAPISANE */}
+      {tab === 'saved' && (
+        <div className="space-y-3.5 animate-fade-in">
+          <button
+            onClick={() => openAddModal()}
+            disabled={pets.length === 0}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-brand-dark text-white font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" /> Dodaj zioło do dziennika
+          </button>
+          {petsError && (
+            <div className="pv-card p-3.5 flex items-center justify-between gap-3">
+              <p className="text-xs text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0" /> Nie udało się pobrać listy pupili.</p>
+              <button onClick={() => { setPetsError(false); petApi.getAll().then((res) => { const list = res.pets || res || []; setPets(list); if (list.length > 0) { setAddPetId(String(list[0].id)); setChatPetId(String(list[0].id)); } }).catch(() => setPetsError(true)); }} className="text-xs font-bold text-brand-dark">Ponów</button>
+            </div>
+          )}
+          {pets.length === 0 && !petsError && (
+            <p className="text-xs text-gray-400 text-center px-4">Dodaj najpierw profil pupila, aby móc zapisywać stosowane zioła.</p>
+          )}
+          {savedError && (
+            <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-xs text-red-700 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> {savedError}
+            </div>
+          )}
 
-      {/* Saved Tab */}
-      {activeTab === 'saved' && (
-        <div className="space-y-4">
           {savedHerbs.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 flex items-center justify-center">
-                <Heart className="w-7 h-7 text-brand-dark" />
+            <div className="pv-card p-10 text-center">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-brand-mint flex items-center justify-center">
+                <Heart className="w-6 h-6 text-brand-dark" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Brak zapisanych ziół</h3>
-              <p className="text-gray-500">Dodaj zioła, które stosujesz u swojego pupila</p>
+              <p className="text-sm font-semibold text-gray-700">Brak zapisanych ziół</p>
+              <p className="text-xs text-gray-400 mt-1">Śledź, jakie zioła i od kiedy stosujesz u swojego pupila.</p>
             </div>
           ) : (
             savedHerbs.map((saved) => (
-              <div key={saved.id} className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 mb-1">{saved.herbName}</h3>
-                    <p className="text-sm text-gray-600 mb-2">Dla: {saved.petName}</p>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Clock className="w-4 h-4" />
-                      Rozpoczęto: {new Date(saved.startDate).toLocaleDateString('pl-PL')}
+              <div key={saved.id} className="pv-card p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">{saved.herbName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Dla: {saved.petName}</p>
+                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Od {new Date(saved.startDate).toLocaleDateString('pl-PL')} · {daysSince(saved.startDate)} dni
                     </div>
-                    {saved.notes && (
-                      <p className="text-sm text-gray-600 mt-2">{saved.notes}</p>
-                    )}
+                    {saved.notes && <p className="text-xs text-gray-600 mt-2 bg-gray-50 rounded-xl p-2.5">{saved.notes}</p>}
                   </div>
+                  <button onClick={() => removeSaved(saved.id)} className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0" aria-label="Usuń">
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
                 </div>
               </div>
             ))
@@ -507,176 +329,293 @@ export default function HerbalMedicine() {
         </div>
       )}
 
-      {/* AI Assistant Tab */}
-      {activeTab === 'ai' && (
-        <div className="space-y-5">
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-200 p-6">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
+      {/* TAB: DORADCA — prawdziwy czat AI z kontekstem pupila */}
+      {tab === 'advisor' && (
+        <div className="space-y-3.5 animate-fade-in">
+          {pets.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">Dla kogo pytasz?</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                <button
+                  onClick={() => setChatPetId('')}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    chatPetId === '' ? 'bg-brand-dark text-white' : 'bg-white text-gray-600 border border-gray-200'
+                  }`}
+                >
+                  Pytanie ogólne
+                </button>
+                {pets.map((pet) => (
+                  <button
+                    key={pet.id}
+                    onClick={() => setChatPetId(String(pet.id))}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                      chatPetId === String(pet.id) ? 'bg-brand-dark text-white' : 'bg-white text-gray-600 border border-gray-200'
+                    }`}
+                  >
+                    <span>{SPECIES_EMOJI[pet.species] || '🐾'}</span> {pet.name}
+                  </button>
+                ))}
               </div>
-              <div>
-                <h3 className="font-bold text-gray-900 mb-1">AI Asystent Ziołolecznictwa</h3>
-                <p className="text-sm text-gray-600">
-                  Zadaj pytanie o zioła, ich zastosowanie lub bezpieczeństwo dla Twojego pupila
+              {chatPetId && (
+                <p className="text-[11px] text-gray-400 mt-1.5 px-1">
+                  Doradca automatycznie uwzględni gatunek, wiek i historię zdrowia tego pupila z Książeczki Zdrowia.
                 </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <textarea
-                value={aiQuestion}
-                onChange={(e) => setAiQuestion(e.target.value)}
-                placeholder="np. Jakie zioła mogę podać psu na problemy trawienne?"
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-purple-200 focus:outline-none focus:border-purple-400 resize-none"
-              />
-              <button
-                onClick={handleAskAI}
-                disabled={!aiQuestion}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <MessageCircle className="w-5 h-5" />
-                Zapytaj AI
-              </button>
-            </div>
-          </div>
-
-          {aiResponse && (
-            <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-6">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-gray-900 mb-2">Odpowiedź AI:</h4>
-                  <p className="text-gray-700 whitespace-pre-wrap">{aiResponse}</p>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
-          {/* Suggested Questions */}
-          <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-            <h4 className="font-semibold text-gray-900 mb-3">Sugerowane pytania:</h4>
-            <div className="space-y-2">
-              {[
-                'Jakie zioła są bezpieczne dla szczeniąt?',
-                'Jak przygotować napar z rumianku dla psa?',
-                'Czy kurkuma pomaga przy zapaleniu stawów?',
-                'Które zioła mogę łączyć ze sobą?'
-              ].map((question, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setAiQuestion(question)}
-                  className="w-full text-left px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm transition-all"
-                >
-                  {question}
+          <div className="pv-card overflow-hidden flex flex-col" style={{ height: '60vh', minHeight: 420 }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-brand-mint/30">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-brand-dark flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Doradca ziołowy AI</p>
+                  <p className="text-[11px] text-gray-500">Odpowiada na podstawie bazy ziół i danych pupila</p>
+                </div>
+              </div>
+              {chatMessages.length > 0 && (
+                <button onClick={resetChat} className="w-8 h-8 rounded-xl bg-white flex items-center justify-center" aria-label="Nowa rozmowa">
+                  <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
                 </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              {chatMessages.length === 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400">Przykładowe pytania:</p>
+                  {[
+                    'Mój pies jest niespokojny podczas burzy, jakie zioło pomoże?',
+                    'Czy mogę podać kurkumę kotu na stawy?',
+                    'Pupil ma lekko luźny stolec od wczoraj, co polecasz?',
+                    'Jakie zioło pomoże na swędzącą skórę?',
+                  ].map((q, i) => (
+                    <button
+                      key={i}
+                      onClick={() => sendChatMessage(q)}
+                      className="w-full text-left px-3.5 py-2.5 rounded-xl bg-gray-50 hover:bg-brand-mint/40 text-xs text-gray-700 transition-all"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`flex gap-2 max-w-[88%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <span className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center ${m.role === 'user' ? 'bg-gray-200' : 'bg-brand-dark'}`}>
+                      {m.role === 'user' ? <User className="w-3.5 h-3.5 text-gray-600" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}
+                    </span>
+                    <div className={`px-3.5 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${m.role === 'user' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-gray-800'}`}>
+                      {m.content}
+                    </div>
+                  </div>
+                </div>
               ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="flex gap-2 max-w-[88%]">
+                    <span className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center bg-brand-dark">
+                      <Sparkles className="w-3.5 h-3.5 text-white" />
+                    </span>
+                    <div className="px-3.5 py-2.5 rounded-2xl bg-gray-100 flex items-center">
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {chatError && (
+                <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-xs text-red-700 flex items-start gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> {chatError}
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="p-3 border-t border-gray-100 flex-shrink-0">
+              <div className="flex gap-2">
+                <input
+                  type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                  placeholder="Napisz pytanie o zioła dla Twojego pupila…"
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand"
+                />
+                <button
+                  onClick={() => sendChatMessage()}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="w-10 h-10 rounded-xl bg-brand-dark text-white flex items-center justify-center flex-shrink-0 disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2 text-center">
+                Doradca AI udziela porad edukacyjnych i może dopytać o brakujące informacje. Nie zastępuje konsultacji z weterynarzem.
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Herb Details Modal */}
-      {selectedHerb && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+      {/* MODAL: Dodaj do dziennika */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-[70] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-gray-900">Dodaj zioło do dziennika</h3>
+              <button onClick={() => setShowAddModal(false)} className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center"><X className="w-4 h-4 text-gray-600" /></button>
+            </div>
+            <div className="p-5 space-y-4">
               <div>
-                <h3 className="font-semibold text-gray-900">{selectedHerb.name}</h3>
-                <p className="text-sm text-gray-500 italic">{selectedHerb.latinName}</p>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Pupil</label>
+                <div className="flex gap-2 overflow-x-auto pb-1 mt-2 scrollbar-none">
+                  {pets.map((pet) => (
+                    <button
+                      key={pet.id}
+                      onClick={() => setAddPetId(String(pet.id))}
+                      className={`flex flex-col items-center flex-shrink-0 px-3 py-2 rounded-xl border-2 transition-all ${
+                        addPetId === String(pet.id) ? 'border-brand-dark bg-brand-mint' : 'border-gray-100'
+                      }`}
+                    >
+                      <span className="text-xl">{SPECIES_EMOJI[pet.species] || '🐾'}</span>
+                      <span className="text-[11px] font-semibold mt-0.5 max-w-[60px] truncate">{pet.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Zioło</label>
+                <select
+                  value={addHerbId} onChange={(e) => setAddHerbId(e.target.value)}
+                  className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:border-brand"
+                >
+                  {HERBS.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Data rozpoczęcia</label>
+                <input
+                  type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)}
+                  className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Notatki (opcjonalnie)</label>
+                <textarea
+                  value={addNotes} onChange={(e) => setAddNotes(e.target.value)} rows={2}
+                  placeholder="np. dawka, reakcja pupila…"
+                  className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 text-sm resize-none focus:outline-none focus:border-brand"
+                />
               </div>
               <button
-                onClick={() => setSelectedHerb(null)}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                onClick={confirmAdd}
+                disabled={!addPetId || !addHerbId}
+                className="w-full py-3.5 rounded-2xl bg-brand-dark text-white font-bold text-sm disabled:opacity-50"
               >
-                <X className="w-5 h-5" />
+                Zapisz
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="p-6 space-y-6">
-              {/* Safety Rating */}
-              <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900 mb-1">Ocena bezpieczeństwa</div>
-                  <div className="flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-5 h-5 ${i < selectedHerb.safetyRating ? 'text-amber-500 fill-current' : 'text-gray-300'}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <Shield className="w-8 h-8 text-brand-dark" />
-              </div>
-
-              {/* Description */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Opis</h4>
-                <p className="text-gray-700">{selectedHerb.description}</p>
-              </div>
-
-              {/* Benefits */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Korzyści</h4>
-                <div className="space-y-2">
-                  {selectedHerb.benefits.map((benefit, idx) => (
-                    <div key={idx} className="flex items-start gap-2">
-                      <Check className="w-5 h-5 text-brand-dark flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{benefit}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Active Compounds */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Aktywne związki</h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedHerb.activeCompounds.map((compound, idx) => (
-                    <span key={idx} className="px-3 py-1.5 rounded-lg bg-brand-light text-brand-dark text-sm font-medium">
-                      {compound}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dosage */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Dawkowanie</h4>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-xl">{selectedHerb.dosage}</p>
-              </div>
-
-              {/* Preparations */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Formy podawania</h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedHerb.preparations.map((prep, idx) => (
-                    <span key={idx} className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm">
-                      {prep}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Warnings */}
-              {selectedHerb.warnings.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <div className="flex items-start gap-2 mb-2">
-                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <h4 className="font-semibold text-amber-900">Ostrzeżenia</h4>
-                  </div>
-                  <ul className="space-y-1 ml-7">
-                    {selectedHerb.warnings.map((warning, idx) => (
-                      <li key={idx} className="text-sm text-amber-800">• {warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+      {/* PEŁNOEKRANOWY DETAL ZIOŁA */}
+      {selectedHerb && (
+        <div className="fixed inset-0 z-[70] bg-white flex flex-col" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <button onClick={() => setSelectedHerb(null)} className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0" aria-label="Zamknij">
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            <HerbImage herb={selectedHerb} className="w-10 h-10" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-sm truncate">{selectedHerb.name}</p>
+              <p className="text-[11px] text-gray-400 italic truncate">{selectedHerb.latinName}</p>
             </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+            {HERB_IMAGES[selectedHerb.id] && (
+              <div className="w-full h-44 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
+                <img src={HERB_IMAGES[selectedHerb.id]} alt={selectedHerb.name} className="w-full h-full object-cover" />
+              </div>
+            )}
+            <p className="text-sm text-gray-700 leading-relaxed">{selectedHerb.description}</p>
+
+            <div className="flex items-center gap-2">
+              <SpeciesIcons usageFor={selectedHerb.usageFor} />
+              <span className="text-xs text-gray-500">
+                {selectedHerb.usageFor.includes('both') ? 'Psy i koty' : selectedHerb.usageFor.includes('dog') ? 'Tylko psy' : 'Tylko koty'}
+              </span>
+            </div>
+
+            {selectedHerb.catCaution && (
+              <div className="rounded-2xl bg-orange-50 border border-orange-200 p-3.5 flex items-start gap-2.5">
+                <Cat className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-orange-800 leading-relaxed"><b>Uwaga u kotów:</b> {selectedHerb.catCaution}</p>
+              </div>
+            )}
+
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Korzyści</h4>
+              <div className="space-y-2">
+                {selectedHerb.benefits.map((b, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-brand-dark flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700">{b}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Aktywne związki</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedHerb.activeCompounds.map((c, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-full bg-brand-light text-brand-dark text-xs font-medium">{c}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-gray-50 p-3.5">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">Dawkowanie</h4>
+              <p className="text-sm text-gray-700">{selectedHerb.dosage}</p>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Formy podawania</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedHerb.preparations.map((p, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">{p}</span>
+                ))}
+              </div>
+            </div>
+
+            {selectedHerb.warnings.length > 0 && (
+              <div className="rounded-2xl bg-red-50 border border-red-100 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-red-700">Ostrzeżenia</h4>
+                </div>
+                <ul className="space-y-1.5">
+                  {selectedHerb.warnings.map((w, i) => (
+                    <li key={i} className="text-xs text-red-700 flex items-start gap-1.5">
+                      <span className="mt-1 w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />{w}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex-shrink-0 bg-white">
+            <button
+              onClick={() => { const id = selectedHerb.id; setSelectedHerb(null); openAddModal(id); }}
+              disabled={pets.length === 0}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand-dark text-white font-bold text-sm disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" /> Dodaj do dziennika
+            </button>
           </div>
         </div>
       )}

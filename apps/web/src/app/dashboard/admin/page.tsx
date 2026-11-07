@@ -98,7 +98,7 @@ export default function AdminDashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="lg:col-span-2 pv-card">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Szybkie akcje</h2>
           </div>
@@ -126,7 +126,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="pv-card">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Status systemu</h2>
           </div>

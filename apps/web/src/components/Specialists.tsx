@@ -28,14 +28,12 @@ export default function Specialists() {
       title: 'Znajdź specjalistę',
       description: 'Behawiorysta, trener czy zoopsycholog blisko Ciebie — z mapą i lokalizacją.',
       icon: Search,
-      color: 'from-[#1B6B4A] to-[#2A8A5C]',
     },
     {
       id: 'mine' as Section,
       title: 'Moje zgłoszenia',
       description: 'Sprawdź status specjalistów, których zgłosiłeś do bazy Petvio.',
       icon: ClipboardCheck,
-      color: 'from-amber-500 to-orange-600',
     },
     ...(isAdmin
       ? [
@@ -44,7 +42,6 @@ export default function Specialists() {
             title: 'Panel weryfikacji',
             description: 'Zatwierdzaj lub odrzucaj zgłoszenia specjalistów (tylko administrator).',
             icon: ShieldCheck,
-            color: 'from-emerald-500 to-teal-600',
           },
         ]
       : []),
@@ -59,12 +56,12 @@ export default function Specialists() {
             <button
               key={s.id}
               onClick={() => setSection(s.id)}
-              className="group text-left p-6 rounded-2xl bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-dark/30 transition-all"
+              className="group text-left p-6 pv-card shadow-sm hover:shadow-md hover:border-brand-dark/30 transition-all"
             >
-              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${s.color} flex items-center justify-center text-white mb-4`}>
+              <div className="w-12 h-12 rounded-2xl bg-brand-mint flex items-center justify-center text-brand-dark mb-4">
                 <Icon className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">{s.title}</h3>
+              <h3 className="pv-section-title mb-1">{s.title}</h3>
               <p className="text-sm text-gray-500 mb-3">{s.description}</p>
               <span className="inline-flex items-center gap-1 text-sm font-medium text-brand-dark group-hover:gap-2 transition-all">
                 Otwórz <ChevronRight className="w-4 h-4" />

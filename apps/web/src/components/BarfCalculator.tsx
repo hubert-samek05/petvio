@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { petApi, barfApi } from '@/lib/api';
+import ConfirmModal from './ui/ConfirmModal';
 import {
   Scale,
   Activity,
@@ -21,6 +22,10 @@ import {
   Plus,
   Trash2,
   ShieldAlert,
+  Dog,
+  Cat,
+  PawPrint,
+  ShoppingCart,
 } from 'lucide-react';
 
 const activityOptions = [
@@ -109,11 +114,14 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
   const [success, setSuccess] = useState('');
   const [loadingPets, setLoadingPets] = useState(true);
   const [specialDietWarning, setSpecialDietWarning] = useState<string | null>(null);
+  const [showShoppingList, setShowShoppingList] = useState(false);
   const [supplementOptions, setSupplementOptions] = useState<any[]>([]);
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [customSupName, setCustomSupName] = useState('');
   const [customSupAmount, setCustomSupAmount] = useState('');
   const [customSupUnit, setCustomSupUnit] = useState('g');
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -145,7 +153,13 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
 
   useEffect(() => {
     const pet = pets.find((p) => p.id.toString() === selectedPetId);
-    if (pet?.weight) setWeightKg(pet.weight.toString());
+    // Reset stanu przy zmianie pupila — brak wagi u pupila nie może zostawiać starej wartości.
+    setWeightKg(pet?.weight ? pet.weight.toString() : '');
+    setSpecialDietWarning(null);
+    setActivePlan(null);
+    setSupplements([]);
+    setError('');
+    setSuccess('');
     if (!selectedPetId) return;
 
     barfApi.getPlanByPet(Number(selectedPetId)).then((data) => {
@@ -180,6 +194,9 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
       } else {
         setSupplements([]);
       }
+    }).catch(() => {
+      setActivePlan(null);
+      setSupplements([]);
     });
   }, [selectedPetId, pets]);
 
@@ -213,7 +230,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
         activityLevel,
         ratioModel,
         customRatios: ratioModel === 'custom' ? customRatios : undefined,
-        mealsPerDay: parseInt(mealsPerDay, 10) || 2,
+        mealsPerDay: Math.min(6, Math.max(1, parseInt(mealsPerDay, 10) || 2)),
         supplements: supplements.map((s) => ({
           name: s.name,
           amount: s.amount === '' ? null : Number(s.amount),
@@ -234,12 +251,16 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
 
   const handleRemovePlan = async () => {
     if (!selectedPetId) return;
+    setRemoving(true);
     try {
       await barfApi.deletePlan(Number(selectedPetId));
       setActivePlan(null);
+      setConfirmRemove(false);
       setSuccess('Plan BARF został usunięty.');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Nie udało się usunąć planu BARF');
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -295,10 +316,11 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
 
   if (loadingPets) {
     return (
-      <div className="text-center py-16 text-gray-500">
-        <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-        Ładowanie...
-      </div>
+      <div className="space-y-4 animate-fade-in">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="pv-skeleton h-28 rounded-3xl" />
+          ))}
+        </div>
     );
   }
 
@@ -322,18 +344,35 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Form */}
         <div className="space-y-4">
+          {pets.length === 0 && (
+            <div className="pv-card p-8 text-center">
+              <PawPrint className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="font-semibold text-gray-900">Brak zwierząt w profilu</p>
+              <p className="text-sm text-gray-400 mt-1">Dodaj pupila, żeby zapisać dla niego plan BARF. Kalkulator możesz też użyć bez zapisywania.</p>
+            </div>
+          )}
           <Field label="Zwierzę">
-            <select
-              value={selectedPetId}
-              onChange={(e) => setSelectedPetId(e.target.value)}
-              className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
-            >
-              {pets.map((pet) => (
-                <option key={pet.id} value={pet.id}>
-                  {pet.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2 flex-wrap">
+              {pets.map((pet) => {
+                const PetIcon = pet.species === 'cat' ? Cat : pet.species === 'dog' ? Dog : PawPrint;
+                const active = selectedPetId === pet.id.toString();
+                return (
+                  <button
+                    key={pet.id}
+                    type="button"
+                    onClick={() => setSelectedPetId(pet.id.toString())}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-semibold border transition-all ${
+                      active
+                        ? 'bg-brand-dark text-white border-transparent shadow-md shadow-brand-dark/20'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <PetIcon className="w-3.5 h-3.5" />
+                    {pet.name}
+                  </button>
+                );
+              })}
+            </div>
           </Field>
 
           <Field label="Waga zwierzęcia (kg)">
@@ -349,6 +388,9 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
                 className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 focus:outline-none"
               />
             </div>
+            {selectedPet && !selectedPet.weight && (
+              <p className="text-xs text-amber-600 mt-2">Ten pupil nie ma podanej wagi w profilu — wpisz ją ręcznie.</p>
+            )}
           </Field>
 
           <Field label="Poziom aktywności / etap życia">
@@ -384,10 +426,18 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
               <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
             <p className="text-xs text-gray-400 mt-2">{ratioModelOptions.find((r) => r.value === ratioModel)?.hint}</p>
+            {selectedPet?.species === 'cat' && activeRatios.vegFruitPct > 0 && (
+              <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <Cat className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                  Koty są drapieżnikami obligatoryjnymi — udział warzyw i owoców ({activeRatios.vegFruitPct}%) jest dla nich opcjonalny. Rozważ model standardowy 80/10/10.
+                </p>
+              </div>
+            )}
           </Field>
 
           {ratioModel === 'custom' && (
-            <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-3">
+            <div className="p-5 pv-card shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Własne proporcje (%)</label>
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${Math.abs(customSum - 100) < 0.5 ? 'bg-brand-mint text-brand-dark' : 'bg-red-50 text-red-600'}`}>
@@ -416,7 +466,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
             </div>
           </Field>
 
-          <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-4">
+          <div className="p-5 pv-card shadow-sm space-y-4">
             <div className="flex items-center gap-2">
               <Pill className="w-4 h-4 text-brand-dark" />
               <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Suplementy</label>
@@ -450,7 +500,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
             {supplements.length > 0 && (
               <div className="space-y-2">
                 {supplements.map((s, idx) => (
-                  <div key={`${s.source}-${s.ingredientId ?? s.name}-${idx}`} className="flex items-center gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+                  <div key={`${s.source}-${s.ingredientId ?? s.name}-${idx}`} className="flex items-center gap-2 p-2.5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                     <span className="text-sm text-gray-700 font-medium flex-1 truncate">{s.name}</span>
                     <input
                       type="number"
@@ -459,7 +509,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
                       placeholder="ilość"
                       value={s.amount}
                       onChange={(e) => updateSupplementAmount(idx, e.target.value)}
-                      className="w-20 text-sm bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-brand-dark/50"
+                      className="w-20 text-sm bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                     />
                     <select
                       value={s.unit}
@@ -486,7 +536,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
                 placeholder="Nazwa własnego suplementu"
                 value={customSupName}
                 onChange={(e) => setCustomSupName(e.target.value)}
-                className="flex-1 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-dark/50"
+                className="flex-1 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
               <input
                 type="number"
@@ -521,7 +571,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all shadow-md shadow-brand-dark/20 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl pv-btn-primary shadow-md shadow-brand-dark/20 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {activePlan ? 'Zapisz jako nowy aktywny plan' : 'Zapisz i aktywuj plan BARF'}
@@ -529,7 +579,7 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
 
           {activePlan && (
             <button
-              onClick={handleRemovePlan}
+              onClick={() => setConfirmRemove(true)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-red-600 hover:bg-red-50 font-medium transition-all text-sm"
             >
               <XCircle className="w-4 h-4" /> Usuń aktywny plan dla {selectedPet?.name}
@@ -549,9 +599,9 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
           )}
 
           {preview ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6 space-y-5">
+            <div className="pv-card p-5 sm:p-6 space-y-5">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-dark to-brand flex items-center justify-center text-white flex-shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-brand-mint flex items-center justify-center text-brand-dark flex-shrink-0">
                   <Sparkles className="w-6 h-6" />
                 </div>
                 <div>
@@ -566,12 +616,46 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <NutrientCard icon={Beef} label="Mięso mięśniowe" grams={preview.muscleMeatGrams} color="text-red-600" bg="bg-red-50" />
-                <NutrientCard icon={Bone} label="Kości mięsno-kostne" grams={preview.boneGrams} color="text-gray-600" bg="bg-gray-50" />
-                <NutrientCard icon={Activity} label="Wątroba" grams={preview.liverGrams} color="text-amber-700" bg="bg-amber-50" />
-                <NutrientCard icon={Activity} label="Inne narządy" grams={preview.otherOrganGrams} color="text-orange-700" bg="bg-orange-50" />
-                <NutrientCard icon={Leaf} label="Warzywa / owoce" grams={preview.vegFruitGrams} color="text-brand-dark" bg="bg-brand-mint" />
-                <NutrientCard icon={Flame} label="Szacowane kcal" grams={preview.caloriesTarget} unit="kcal" color="text-brand-dark" bg="bg-brand-dark/10" />
+                <NutrientCard icon={Beef} label="Mięso mięśniowe" grams={preview.muscleMeatGrams} perMeal={preview.muscleMeatGrams / (parseInt(mealsPerDay, 10) || 1)} />
+                <NutrientCard icon={Bone} label="Kości mięsno-kostne" grams={preview.boneGrams} perMeal={preview.boneGrams / (parseInt(mealsPerDay, 10) || 1)} />
+                <NutrientCard icon={Activity} label="Wątroba" grams={preview.liverGrams} perMeal={preview.liverGrams / (parseInt(mealsPerDay, 10) || 1)} />
+                <NutrientCard icon={Activity} label="Inne narządy" grams={preview.otherOrganGrams} perMeal={preview.otherOrganGrams / (parseInt(mealsPerDay, 10) || 1)} />
+                <NutrientCard icon={Leaf} label="Warzywa / owoce" grams={preview.vegFruitGrams} perMeal={preview.vegFruitGrams / (parseInt(mealsPerDay, 10) || 1)} />
+                <NutrientCard icon={Flame} label="Szacowane kcal" grams={preview.caloriesTarget} unit="kcal" />
+              </div>
+
+              {/* Lista zakupów — 7 dni */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowShoppingList((v) => !v)}
+                  className="flex items-center gap-2 text-sm font-semibold text-brand-dark hover:text-brand transition-colors"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  {showShoppingList ? 'Ukryj listę zakupów' : 'Lista zakupów na 7 dni'}
+                </button>
+                {showShoppingList && (
+                  <div className="mt-2 p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-1.5">
+                    <ShoppingRow label="Mięso mięśniowe" grams={preview.muscleMeatGrams * 7} />
+                    <ShoppingRow label="Kości mięsno-kostne (surowe)" grams={preview.boneGrams * 7} />
+                    <ShoppingRow label="Wątroba" grams={preview.liverGrams * 7} />
+                    <ShoppingRow label="Inne narządy" grams={preview.otherOrganGrams * 7} />
+                    {preview.vegFruitGrams > 0 && <ShoppingRow label="Warzywa / owoce" grams={preview.vegFruitGrams * 7} />}
+                    {supplements.length > 0 && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Suplementy</p>
+                        {supplements.map((s, i) => (
+                          <p key={i} className="text-xs text-gray-600">
+                            {s.name}{s.amount !== '' ? ` — ${s.amount} ${s.unit}/dzień` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-400 pt-1">
+                      Razem ok. {Math.round(preview.dailyFoodGrams * 7)} g pokarmu na tydzień.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {supplements.length > 0 && (
@@ -598,20 +682,32 @@ export default function BarfCalculator({ preset }: { preset?: BarfPreset | null 
               </div>
             </div>
           ) : (
-            <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
-              <Scale className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <div className="pv-card p-14 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-3xl bg-brand-mint flex items-center justify-center animate-float">
+            <Scale className="w-7 h-7 text-brand-dark" />
+          </div>
               <p className="text-gray-500 text-sm">Podaj wagę zwierzęcia, aby zobaczyć obliczony plan BARF</p>
             </div>
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmRemove}
+        onCancel={() => setConfirmRemove(false)}
+        onConfirm={handleRemovePlan}
+        loading={removing}
+        title="Usuń plan BARF"
+        description={`Czy na pewno chcesz usunąć aktywny plan BARF dla ${selectedPet?.name || 'tego zwierzęcia'}?`}
+        confirmLabel="Usuń"
+      />
     </div>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all">
+    <div className="p-5 pv-card shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all">
       <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{label}</label>
       {children}
     </div>
@@ -641,26 +737,38 @@ function NutrientCard({
   icon: Icon,
   label,
   grams,
+  perMeal,
   unit = 'g',
-  color,
-  bg,
 }: {
   icon: any;
   label: string;
   grams: number;
+  perMeal?: number;
   unit?: string;
-  color: string;
-  bg: string;
 }) {
   return (
-    <div className={`p-3 rounded-xl ${bg}`}>
+    <div className="p-3 rounded-xl bg-brand-mint/60 border border-brand-light/50">
       <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={`w-3.5 h-3.5 ${color}`} />
+        <Icon className="w-3.5 h-3.5 text-brand-dark" />
         <span className="text-xs text-gray-600">{label}</span>
       </div>
-      <p className={`text-lg font-semibold ${color}`}>
+      <p className="text-lg font-semibold text-gray-900">
         {grams} {unit}
       </p>
+      {perMeal !== undefined && perMeal > 0 && (
+        <p className="text-[10px] text-gray-500 mt-0.5">{Math.round(perMeal * 10) / 10} g na posiłek</p>
+      )}
+    </div>
+  );
+}
+
+function ShoppingRow({ label, grams }: { label: string; grams: number }) {
+  if (!grams || grams <= 0) return null;
+  const kg = grams / 1000;
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className="font-semibold text-gray-900">{kg >= 1 ? `${kg.toFixed(2)} kg` : `${Math.round(grams)} g`}</span>
     </div>
   );
 }

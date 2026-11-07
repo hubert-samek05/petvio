@@ -3,25 +3,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { specialDietApi } from '@/lib/api';
-import {
-  X,
-  Apple,
-  Loader2,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-} from 'lucide-react';
+import { X, Apple, Loader2, Trash2, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { DIET_TEMPLATES } from './dietTemplates';
 
-const dietTypes = [
-  { value: 'renal', label: 'Nerkowa' },
-  { value: 'diabetic', label: 'Cukrzycowa' },
-  { value: 'elimination', label: 'Eliminacyjna' },
-  { value: 'barf', label: 'BARF' },
-  { value: 'weight', label: 'Nadwaga / odchudzanie' },
-  { value: 'allergy', label: 'Alergia' },
-  { value: 'other', label: 'Inna' },
-];
+const dietTypes = DIET_TEMPLATES.map((t) => ({ value: t.type, label: t.label }));
 
 interface SpecialDiet {
   id: number;
@@ -38,6 +23,15 @@ interface SpecialDiet {
   is_active: boolean;
 }
 
+type DietPrefill = {
+  type: string;
+  label: string;
+  indication?: string;
+  allowedFoods?: string;
+  forbiddenFoods?: string;
+  recommendations?: string;
+};
+
 type SpecialDietModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -45,6 +39,8 @@ type SpecialDietModalProps = {
   onDelete?: (id: number) => void;
   pets: any[];
   editingDiet?: SpecialDiet | null;
+  prefill?: DietPrefill | null;
+  defaultPetId?: string;
 };
 
 export default function SpecialDietModal({
@@ -54,6 +50,8 @@ export default function SpecialDietModal({
   onDelete,
   pets,
   editingDiet,
+  prefill,
+  defaultPetId,
 }: SpecialDietModalProps) {
   const [form, setForm] = useState({
     petId: '',
@@ -107,14 +105,30 @@ export default function SpecialDietModal({
         forbiddenFoods: editingDiet.forbidden_foods || '',
         recommendations: editingDiet.recommendations || '',
         notes: editingDiet.notes || '',
-        startDate: editingDiet.start_date || '',
-        endDate: editingDiet.end_date || '',
+        startDate: (editingDiet.start_date || '').slice(0, 10),
+        endDate: (editingDiet.end_date || '').slice(0, 10),
         isActive: editingDiet.is_active,
       });
+    } else if (prefill) {
+      // Otwarcie z galerii szablonów — auto-wypełnienie zasad diety.
+      const knownType = dietTypes.some((t) => t.value === prefill.type);
+      setForm({
+        ...initialForm,
+        petId: defaultPetId || initialForm.petId,
+        name: prefill.type === 'other' ? '' : `Dieta ${prefill.label.toLowerCase()}`,
+        dietType: knownType ? prefill.type : 'other',
+        customDietType: knownType ? '' : prefill.label,
+        indication: prefill.indication || '',
+        allowedFoods: prefill.allowedFoods || '',
+        forbiddenFoods: prefill.forbiddenFoods || '',
+        recommendations: prefill.recommendations || '',
+        startDate: new Date().toISOString().slice(0, 10),
+        isActive: true,
+      });
     } else {
-      setForm(initialForm);
+      setForm({ ...initialForm, petId: defaultPetId || initialForm.petId });
     }
-  }, [isOpen, editingDiet, initialForm]);
+  }, [isOpen, editingDiet, initialForm, prefill, defaultPetId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -176,6 +190,24 @@ export default function SpecialDietModal({
 
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
+  // Wybór typu z listy szablonów — auto-wypełnia zasady diety.
+  const applyTemplate = (t: (typeof DIET_TEMPLATES)[number]) => {
+    if (editingDiet) {
+      setForm({ ...form, dietType: t.type });
+      return;
+    }
+    setForm({
+      ...form,
+      dietType: t.type,
+      name: form.name.trim() || (t.type === 'other' ? '' : `Dieta ${t.label.toLowerCase()}`),
+      customDietType: '',
+      indication: t.indication || form.indication,
+      allowedFoods: t.allowedFoods || form.allowedFoods,
+      forbiddenFoods: t.forbiddenFoods || form.forbiddenFoods,
+      recommendations: t.recommendations || form.recommendations,
+    });
+  };
+
   const handleSubmit = async () => {
     if (!stepValid()) {
       setError('Uzupełnij wymagane pola');
@@ -222,7 +254,7 @@ export default function SpecialDietModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain bg-white rounded-3xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm px-5 sm:px-8 pt-6 sm:pt-8 pb-4 rounded-t-3xl z-10">
           <div className="flex items-start justify-between">
@@ -301,15 +333,20 @@ export default function SpecialDietModal({
               <WizardField label="Typ diety" full>
                 <select
                   value={form.dietType}
-                  onChange={(e) => setForm({ ...form, dietType: e.target.value })}
+                  onChange={(e) => {
+                    const t = DIET_TEMPLATES.find((x) => x.type === e.target.value);
+                    if (t) applyTemplate(t);
+                    else setForm({ ...form, dietType: e.target.value });
+                  }}
                   className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
                 >
                   {dietTypes.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
+                {!editingDiet && form.dietType !== 'other' && (
+                  <p className="text-[11px] text-brand-dark mt-2">Zasady diety auto-wypełnione z szablonu — możesz je edytować w kolejnych krokach.</p>
+                )}
               </WizardField>
 
               {form.dietType === 'other' && (
@@ -431,7 +468,7 @@ export default function SpecialDietModal({
                 </button>
               </WizardField>
 
-              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+              <div className="p-5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Podsumowanie</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -482,7 +519,7 @@ export default function SpecialDietModal({
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="px-8 py-3.5 rounded-full border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                  className="px-8 py-3.5 rounded-full pv-btn-ghost flex items-center justify-center gap-2"
                 >
                   <ChevronLeft className="w-4 h-4" /> Wstecz
                 </button>
@@ -492,7 +529,7 @@ export default function SpecialDietModal({
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
               >
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
@@ -501,7 +538,7 @@ export default function SpecialDietModal({
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {editingDiet ? 'Zapisz zmiany' : 'Dodaj dietę'}
@@ -528,7 +565,7 @@ function WizardField({
 }) {
   return (
     <div
-      className={`p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
+      className={`p-5 pv-card shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
         full ? 'sm:col-span-2' : ''
       }`}
     >

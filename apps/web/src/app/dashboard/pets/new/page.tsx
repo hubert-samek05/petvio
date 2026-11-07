@@ -3,38 +3,40 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft, Plus, PawPrint, Hash, Scale, Dna } from 'lucide-react';
 import { petApi } from '@/lib/api';
+import {
+  PetFormData, EMPTY_PET_FORM, Field, inputCls,
+  SpeciesPicker, GenderPicker, PhotoPicker, PetPreview, todayDateInput,
+} from '@/components/PetForm';
 
 export default function NewPetPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    name: '',
-    species: 'dog',
-    breed: '',
-    birthDate: '',
-    gender: 'male',
-    weight: '',
-    microchipNumber: '',
-  });
+  const [form, setForm] = useState<PetFormData>(EMPTY_PET_FORM);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const set = (patch: Partial<PetFormData>) => setForm((f) => ({ ...f, ...patch }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name.trim()) {
+      setError('Podaj imię zwierzęcia');
+      return;
+    }
     setError('');
     setLoading(true);
 
     try {
       await petApi.create({
-        ...formData,
-        weight: formData.weight ? parseFloat(formData.weight) : null,
+        name: form.name.trim(),
+        species: form.species,
+        breed: form.breed || null,
+        birthDate: form.birthDate || null,
+        gender: form.gender || null,
+        weight: form.weight ? parseFloat(form.weight) : null,
+        microchipNumber: form.microchipNumber || null,
+        photoUrl: form.photoUrl || null,
       });
       router.push('/dashboard/pets');
     } catch (err: any) {
@@ -45,149 +47,150 @@ export default function NewPetPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <Link href="/dashboard/pets" className="text-brand-dark hover:text-brand-dark font-medium">
-          ← Powrót do listy
-        </Link>
+    <div className="max-w-3xl mx-auto space-y-7">
+      <Link
+        href="/dashboard/pets"
+        className="inline-flex items-center gap-2 text-sm font-medium text-brand-dark hover:text-brand transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" /> Powrót do listy
+      </Link>
+
+      {/* Nagłówek */}
+      <div className="flex items-center gap-4 animate-slide-up">
+        <div
+          className="w-14 h-14 rounded-3xl flex items-center justify-center text-2xl shadow-lg animate-float"
+          style={{ background: 'linear-gradient(135deg,#0F3D2E,#1B6B4A)' }}
+        >
+          <PawPrint className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h1 className="font-serif text-2xl sm:text-3xl font-normal text-gray-900">Nowy pupil</h1>
+          <p className="text-gray-500 text-sm">Dodaj zwierzę, aby śledzić jego zdrowie, spacery i karmienie</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-8 border border-gray-200">
-        <h1 className="text-3xl font-semibold text-gray-900 mb-2">Dodaj zwierzę</h1>
-        <p className="text-gray-600 mb-8">Uzupełnij podstawowe informacje o swoim pupilu</p>
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium animate-slide-down">
+          {error}
+        </div>
+      )}
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Imię zwierzęcia
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-              placeholder="np. Burek"
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Sekcja 1: Kim jest twój pupil */}
+        <div className="pv-card p-5 sm:p-7 animate-slide-up stagger-1">
+          <p className="pv-section-title mb-5">Kim jest twój pupil?</p>
+          <div className="flex flex-col sm:flex-row gap-6">
+            <PhotoPicker
+              photoUrl={form.photoUrl}
+              species={form.species}
+              onChange={(b64) => set({ photoUrl: b64 })}
+              onError={setError}
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Gatunek
-              </label>
-              <select
-                name="species"
-                value={formData.species}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-              >
-                <option value="dog">Pies</option>
-                <option value="cat">Kot</option>
-                <option value="other">Inne</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Płeć
-              </label>
-              <select
-                name="gender"
-                value={formData.gender}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-              >
-                <option value="male">Samiec</option>
-                <option value="female">Samica</option>
-              </select>
+            <div className="flex-1 space-y-4">
+              <Field label="Imię zwierzęcia" full>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  required
+                  className={inputCls}
+                  placeholder="np. Burek"
+                />
+              </Field>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2.5">Gatunek</p>
+                <SpeciesPicker value={form.species} onChange={(v) => set({ species: v })} />
+              </div>
             </div>
           </div>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rasa
-            </label>
-            <input
-              type="text"
-              name="breed"
-              value={formData.breed}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-              placeholder="np. Golden Retriever"
-            />
-          </div>
+        {/* Sekcja 2: Szczegóły */}
+        <div className="pv-card p-5 sm:p-7 animate-slide-up stagger-2">
+          <p className="pv-section-title mb-5">Szczegóły</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Rasa" optional>
+              <div className="flex items-center gap-3">
+                <Dna className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={form.breed}
+                  onChange={(e) => set({ breed: e.target.value })}
+                  className={inputCls}
+                  placeholder="np. Golden Retriever"
+                />
+              </div>
+            </Field>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Data urodzenia
-              </label>
+            <Field label="Data urodzenia" optional>
               <input
                 type="date"
-                name="birthDate"
-                value={formData.birthDate}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
+                value={form.birthDate}
+                onChange={(e) => set({ birthDate: e.target.value })}
+                max={todayDateInput()}
+                className={inputCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Waga (kg)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                name="weight"
-                value={formData.weight}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-                placeholder="np. 25.5"
-              />
-            </div>
+            <Field label="Waga" optional>
+              <div className="flex items-center gap-3">
+                <Scale className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.weight}
+                  onChange={(e) => set({ weight: e.target.value })}
+                  className={inputCls}
+                  placeholder="np. 12.5"
+                />
+                <span className="text-sm font-semibold text-gray-400 flex-shrink-0">kg</span>
+              </div>
+            </Field>
+
+            <Field label="Numer mikroczipu" optional>
+              <div className="flex items-center gap-3">
+                <Hash className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={form.microchipNumber}
+                  onChange={(e) => set({ microchipNumber: e.target.value })}
+                  className={inputCls}
+                  placeholder="np. 123456789012345"
+                />
+              </div>
+            </Field>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Numer mikroczipu (opcjonalnie)
-            </label>
-            <input
-              type="text"
-              name="microchipNumber"
-              value={formData.microchipNumber}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-              placeholder="np. 123456789012345"
-            />
+          <div className="mt-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2.5">Płeć</p>
+            <GenderPicker value={form.gender} onChange={(v) => set({ gender: v })} />
           </div>
+        </div>
 
-          <div className="flex gap-4 pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3 rounded-full font-medium transition-all disabled:opacity-50"
-            >
-              {loading ? 'Dodawanie...' : 'Dodaj zwierzę'}
+        {/* Sekcja 3: Podgląd + akcje */}
+        <div className="pv-card p-5 sm:p-7 animate-slide-up stagger-3">
+          <p className="pv-section-title mb-4">Tak będzie wyglądać profil</p>
+          <PetPreview form={form} />
+          <div className="flex flex-col sm:flex-row gap-3 mt-6">
+            <button type="submit" disabled={loading} className="pv-btn-primary flex-1 py-4 disabled:opacity-50">
+              {loading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Dodawanie…
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" /> Dodaj zwierzę
+                </>
+              )}
             </button>
-            <Link
-              href="/dashboard/pets"
-              className="px-8 py-3 border border-gray-300 text-gray-700 rounded-full font-medium hover:bg-gray-50 transition-all"
-            >
+            <Link href="/dashboard/pets" className="pv-btn-ghost px-8 py-4">
               Anuluj
             </Link>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

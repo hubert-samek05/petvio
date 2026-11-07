@@ -11,7 +11,7 @@ export default function AdminReportsPage() {
     <div className="p-6 lg:p-8 space-y-6">
             <PageHeader title="Raporty" description="Analiza danych i statystyki systemu" />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-lg bg-brand-light flex items-center justify-center">
               <BarChart3 className="w-6 h-6 text-brand-dark" />
@@ -24,7 +24,7 @@ export default function AdminReportsPage() {
           <p className="text-sm text-brand-dark">+12% vs poprzedni okres</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-lg bg-brand-light flex items-center justify-center">
               <Calendar className="w-6 h-6 text-brand-dark" />
@@ -37,7 +37,7 @@ export default function AdminReportsPage() {
           <p className="text-sm text-brand-dark">+8% vs poprzedni okres</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-lg bg-brand-light flex items-center justify-center">
               <BarChart3 className="w-6 h-6 text-brand-dark" />
@@ -51,7 +51,7 @@ export default function AdminReportsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="pv-card p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Aktywność użytkowników</h2>
         <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
           <p className="text-gray-500">Wykres aktywności użytkowników</p>
@@ -59,7 +59,7 @@ export default function AdminReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Najpopularniejsze funkcje</h2>
           <div className="space-y-4">
             {[
@@ -82,7 +82,7 @@ export default function AdminReportsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="pv-card p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Geografia użytkowników</h2>
           <div className="space-y-4">
             {[

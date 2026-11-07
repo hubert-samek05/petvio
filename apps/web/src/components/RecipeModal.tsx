@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { recipeApi } from '@/lib/api';
+import { checkToxicIngredients, toxicTargetLabel } from './toxicIngredients';
 import {
   X,
   ChefHat,
@@ -15,6 +16,7 @@ import {
   Clock,
   Users,
   Flame,
+  ShieldAlert,
 } from 'lucide-react';
 
 const speciesOptions = [
@@ -210,7 +212,7 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain bg-white rounded-3xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm px-5 sm:px-8 pt-6 sm:pt-8 pb-4 rounded-t-3xl z-10">
           <div className="flex items-start justify-between">
@@ -360,6 +362,17 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
                   rows={5}
                   className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none resize-none"
                 />
+                {(() => {
+                  const toxic = checkToxicIngredients(form.ingredients, form.species);
+                  return toxic.length > 0 ? (
+                    <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                      <ShieldAlert className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">
+                        <span className="font-semibold">Uwaga:</span> {toxic.join(', ')} — potencjalnie szkodliwe dla {toxicTargetLabel(form.species)}. Zweryfikuj przed zapisem.
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
               </WizardField>
 
               <WizardField label="Sposób przygotowania" full>
@@ -420,7 +433,7 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
                 </WizardField>
               </div>
 
-              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+              <div className="p-5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Podsumowanie</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -462,7 +475,7 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="px-8 py-3.5 rounded-full border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                  className="px-8 py-3.5 rounded-full pv-btn-ghost flex items-center justify-center gap-2"
                 >
                   <ChevronLeft className="w-4 h-4" /> Wstecz
                 </button>
@@ -472,7 +485,7 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
               >
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
@@ -481,7 +494,7 @@ export default function RecipeModal({ isOpen, onClose, onSaved, onDelete, editin
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChefHat className="w-4 h-4" />}
                 {editingRecipe ? 'Zapisz zmiany' : 'Dodaj przepis'}
@@ -508,7 +521,7 @@ function WizardField({
 }) {
   return (
     <div
-      className={`p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
+      className={`p-5 pv-card shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
         full ? 'sm:col-span-2' : ''
       }`}
     >

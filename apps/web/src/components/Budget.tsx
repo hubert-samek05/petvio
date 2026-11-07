@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { petApi, userPreferencesApi } from '@/lib/api';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import {
   Wallet,
   TrendingUp,
@@ -18,7 +20,9 @@ import {
   AlertCircle,
   ChevronRight,
   ChevronLeft,
-  ArrowRight
+  ArrowRight,
+  Trash2,
+  PieChart
 } from 'lucide-react';
 
 interface Expense {
@@ -54,6 +58,15 @@ const categories = [
 
 const stepLabels = ['Kategoria', 'Kwota', 'Opis', 'Data'];
 
+// Budżet w user_preferences (per-konto, synchronizacja) + mirror lokalny na offline.
+const PREFS_KEY = 'budget_data';
+const persistLocal = (expenses: Expense[], budgets: Budget[]) => {
+  try {
+    localStorage.setItem('petExpenses', JSON.stringify(expenses));
+    localStorage.setItem('petBudgets', JSON.stringify(budgets));
+  } catch {}
+};
+
 export default function Budget() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
@@ -72,6 +85,32 @@ export default function Budget() {
   });
 
   const [budgetAmount, setBudgetAmount] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const [syncError, setSyncError] = useState('');
+
+  // Zapis: serwer (per-konto) + mirror lokalny. Błąd serwera nie gubi danych.
+  const persist = (updatedExpenses: Expense[], updatedBudgets: Budget[]) => {
+    setExpenses(updatedExpenses);
+    setBudgets(updatedBudgets);
+    persistLocal(updatedExpenses, updatedBudgets);
+    setSyncError('');
+    userPreferencesApi
+      .set(PREFS_KEY, { expenses: updatedExpenses, budgets: updatedBudgets })
+      .catch(() => setSyncError('Nie udało się zsynchronizować z serwerem — zmiany zapisane tylko na tym urządzeniu.'));
+  };
+
+  // ESC zamyka modale
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddExpense(false);
+        setShowSetBudget(false);
+        setStep(1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     if (showAddExpense || showSetBudget) {
@@ -91,25 +130,46 @@ export default function Budget() {
   }, [showAddExpense, showSetBudget]);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const mockPets: Pet[] = [
-        { id: '1', name: 'Burek', species: 'dog' },
-        { id: '2', name: 'Mia', species: 'cat' },
-      ];
-      setPets(mockPets);
-      setSelectedPet(mockPets[0].id);
+    petApi
+      .getAll()
+      .then((res) => {
+        const list = (res.pets || res || []).map((p: any) => ({
+          id: String(p.id),
+          name: p.name,
+          species: p.species,
+        }));
+        setPets(list);
+        if (list.length > 0) setSelectedPet(list[0].id);
+      })
+      .catch(() => setPets([]));
 
-      const savedBudgets = localStorage.getItem('petBudgets');
-      if (savedBudgets) {
-        setBudgets(JSON.parse(savedBudgets));
-      }
-
-      const savedExpenses = localStorage.getItem('petExpenses');
-      if (savedExpenses) {
-        setExpenses(JSON.parse(savedExpenses));
-      }
-    }
+    // Ładowanie: serwer wygrywa, fallback na mirror lokalny
+    (async () => {
+      let serverExpenses: Expense[] | null = null;
+      let serverBudgets: Budget[] | null = null;
+      try {
+        const res = await userPreferencesApi.get(PREFS_KEY);
+        if (res?.value) {
+          if (Array.isArray(res.value.expenses)) serverExpenses = res.value.expenses;
+          if (Array.isArray(res.value.budgets)) serverBudgets = res.value.budgets;
+        }
+      } catch {}
+      try {
+        if (serverExpenses !== null || serverBudgets !== null) {
+          setExpenses(serverExpenses || []);
+          setBudgets(serverBudgets || []);
+          persistLocal(serverExpenses || [], serverBudgets || []);
+        } else {
+          const le = JSON.parse(localStorage.getItem('petExpenses') || '[]');
+          const lb = JSON.parse(localStorage.getItem('petBudgets') || '[]');
+          setExpenses(Array.isArray(le) ? le : []);
+          setBudgets(Array.isArray(lb) ? lb : []);
+          if ((le.length || lb.length) && (serverExpenses === null && serverBudgets === null)) {
+            userPreferencesApi.set(PREFS_KEY, { expenses: le, budgets: lb }).catch(() => {});
+          }
+        }
+      } catch {}
+    })();
   }, []);
 
   const currentPet = pets.find(p => p.id === selectedPet);
@@ -124,21 +184,22 @@ export default function Budget() {
   const budgetPercentage = currentBudget ? (totalSpent / currentBudget.monthlyLimit) * 100 : 0;
 
   const handleAddExpense = () => {
-    if (!selectedPet || !newExpense.amount || !newExpense.description) return;
+    if (!selectedPet || !newExpense.amount || !newExpense.description.trim()) return;
+    const amount = parseFloat(newExpense.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 999999) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newExpense.date)) return;
 
     const expense: Expense = {
-      id: Date.now().toString(),
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       petId: selectedPet,
       petName: currentPet?.name || '',
       category: newExpense.category,
-      amount: parseFloat(newExpense.amount),
-      description: newExpense.description,
+      amount: Math.round(amount * 100) / 100,
+      description: newExpense.description.trim().slice(0, 200),
       date: newExpense.date,
     };
 
-    const updatedExpenses = [...expenses, expense];
-    setExpenses(updatedExpenses);
-    localStorage.setItem('petExpenses', JSON.stringify(updatedExpenses));
+    persist([...expenses, expense], budgets);
 
     setNewExpense({
       category: 'food',
@@ -150,19 +211,24 @@ export default function Budget() {
     setStep(1);
   };
 
+  const handleDeleteExpense = () => {
+    if (!deleteTarget) return;
+    persist(expenses.filter((e) => e.id !== deleteTarget.id), budgets);
+    setDeleteTarget(null);
+  };
+
   const handleSetBudget = () => {
     if (!selectedPet || !budgetAmount) return;
+    const limit = parseFloat(budgetAmount);
+    if (!Number.isFinite(limit) || limit <= 0 || limit > 999999) return;
 
     const newBudget: Budget = {
       petId: selectedPet,
       petName: currentPet?.name || '',
-      monthlyLimit: parseFloat(budgetAmount),
+      monthlyLimit: limit,
     };
 
-    const updatedBudgets = budgets.filter(b => b.petId !== selectedPet);
-    updatedBudgets.push(newBudget);
-    setBudgets(updatedBudgets);
-    localStorage.setItem('petBudgets', JSON.stringify(updatedBudgets));
+    persist(expenses, [...budgets.filter(b => b.petId !== selectedPet), newBudget]);
 
     setBudgetAmount('');
     setShowSetBudget(false);
@@ -196,27 +262,52 @@ export default function Budget() {
     </div>
   );
 
+  if (pets.length === 0) {
+    return (
+      <div className="pv-card p-12 text-center animate-pop-in">
+        <div className="w-20 h-20 mx-auto mb-5 rounded-3xl bg-brand-mint flex items-center justify-center text-4xl animate-float">
+          🐾
+        </div>
+        <h3 className="font-serif text-xl font-normal text-gray-900 mb-2">Najpierw dodaj zwierzę</h3>
+        <p className="text-gray-500 mb-6">Budżet jest przypisany do konkretnego pupila</p>
+        <a href="/dashboard/pets/new" className="pv-btn-primary px-7 py-3 inline-flex">
+          <Plus className="w-4 h-4" /> Dodaj zwierzę
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      {/* Month Selector */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-brand-dark" />
-            <span className="font-semibold text-gray-900">Miesiąc</span>
+      {/* Pet picker + Month */}
+      <div className="pv-card p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2 overflow-x-auto flex-1 pb-1">
+            {pets.map((p) => {
+              const sel = selectedPet === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPet(p.id)}
+                  className={`pv-chip ${sel ? 'pv-chip-active' : ''}`}
+                >
+                  {p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : '🐾'} {p.name}
+                </button>
+              );
+            })}
           </div>
           <input
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium focus:outline-none focus:border-brand-dark"
+            className="px-4 py-2.5 rounded-2xl bg-white border border-gray-200 shadow-sm text-sm font-medium focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
           />
         </div>
       </div>
 
       {/* Budget Overview */}
       {currentBudget ? (
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-5">
+        <div className="pv-card p-5">
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="text-sm text-gray-500 mb-1">Budżet miesięczny</div>
@@ -224,7 +315,7 @@ export default function Budget() {
             </div>
             <button
               onClick={() => setShowSetBudget(true)}
-              className="px-4 py-2 rounded-xl bg-brand-dark hover:bg-brand-dark text-white font-medium transition-all"
+              className="pv-btn-ghost px-4 py-2 text-sm"
             >
               Edytuj
             </button>
@@ -261,17 +352,17 @@ export default function Budget() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#1B6B4A]/10 to-[#2A8A5C]/10 flex items-center justify-center">
-            <Wallet className="w-7 h-7 text-brand" />
+        <div className="pv-card p-12 text-center animate-pop-in">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-3xl bg-brand-mint flex items-center justify-center animate-float">
+            <Wallet className="w-7 h-7 text-brand-dark" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Ustaw budżet miesięczny</h3>
+          <h3 className="font-serif text-xl font-normal text-gray-900 mb-2">Ustaw budżet miesięczny</h3>
           <p className="text-gray-500 mb-6">
             Określ ile chcesz wydawać miesięcznie na {currentPet?.name}
           </p>
           <button
             onClick={() => setShowSetBudget(true)}
-            className="inline-flex items-center bg-brand-dark hover:bg-brand-dark text-white px-8 py-3 rounded-full font-medium transition-all"
+            className="pv-btn-primary px-8 py-3"
           >
             Ustaw budżet
           </button>
@@ -281,28 +372,66 @@ export default function Budget() {
       {/* Add Expense Button */}
       <button
         onClick={() => setShowAddExpense(true)}
-        className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl bg-brand-dark text-white font-semibold hover:bg-brand-dark transition-all"
+        className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl pv-btn-primary"
       >
         <Plus className="w-6 h-6" />
         Dodaj wydatek
       </button>
 
+      {/* Podsumowanie po kategoriach */}
+      {filteredExpenses.length > 0 && (
+        <div className="pv-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <PieChart className="w-5 h-5 text-brand-dark" />
+            <h3 className="text-sm font-semibold text-gray-900">Wydatki wg kategorii</h3>
+          </div>
+          <div className="space-y-2.5">
+            {categories
+              .map((cat) => ({
+                ...cat,
+                sum: filteredExpenses.filter((e) => e.category === cat.id).reduce((s, e) => s + e.amount, 0),
+              }))
+              .filter((c) => c.sum > 0)
+              .sort((a, b) => b.sum - a.sum)
+              .map((cat) => {
+                const Icon = cat.icon;
+                const pct = totalSpent > 0 ? (cat.sum / totalSpent) * 100 : 0;
+                return (
+                  <div key={cat.id} className="flex items-center gap-3">
+                    <Icon className="w-4 h-4 flex-shrink-0" style={{ color: cat.color }} />
+                    <span className="text-sm text-gray-600 w-20 flex-shrink-0">{cat.name}</span>
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }} />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 w-20 text-right">
+                      {cat.sum.toFixed(0)} zł
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Expenses List */}
       {filteredExpenses.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm p-12 text-center">
-          <DollarSign className="w-16 h-16 mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500">Brak wydatków w tym miesiącu</p>
+        <div className="pv-card p-12 text-center animate-pop-in">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-3xl bg-brand-mint flex items-center justify-center animate-float">
+            <DollarSign className="w-7 h-7 text-brand-dark" />
+          </div>
+          <p className="font-semibold text-gray-700">Brak wydatków w tym miesiącu</p>
+          <p className="text-sm text-gray-500 mt-1">Dodaj pierwszy wydatek przyciskiem powyżej</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((expense) => {
+          {filteredExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((expense, i) => {
             const category = categories.find(c => c.id === expense.category);
             const Icon = category?.icon || DollarSign;
 
             return (
               <div
                 key={expense.id}
-                className="group relative bg-white rounded-2xl border border-gray-200/70 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-brand-dark/30 transition-all duration-300 overflow-hidden"
+                className={`group relative pv-card-hover overflow-hidden animate-slide-up stagger-${Math.min(i + 1, 8)}`}
               >
                 <div className="h-1.5 bg-gradient-to-r from-brand-dark to-brand"></div>
                 <div className="p-5">
@@ -317,7 +446,16 @@ export default function Budget() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-bold text-brand-dark">{expense.amount.toFixed(2)} zł</span>
-                    <span className="text-xs text-gray-500">{category?.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">{category?.name}</span>
+                      <button
+                        onClick={() => setDeleteTarget(expense)}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                        title="Usuń wydatek"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -326,11 +464,17 @@ export default function Budget() {
         </div>
       )}
 
+      {syncError && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs">
+          {syncError}
+        </div>
+      )}
+
       {/* Add Expense Modal */}
       {showAddExpense && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => { setShowAddExpense(false); setStep(1); }}>
+          <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-[28px] z-10">
               <h3 className="font-semibold text-gray-900">Dodaj wydatek</h3>
               <button
                 onClick={() => {
@@ -419,7 +563,7 @@ export default function Budget() {
                 {step > 1 && (
                   <button
                     onClick={prevStep}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-all"
+                    className="pv-btn-ghost px-4 py-2.5"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Wstecz
@@ -433,7 +577,7 @@ export default function Budget() {
                       (step === 2 && !newExpense.amount) ||
                       (step === 3 && !newExpense.description)
                     }
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl pv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Dalej
                     <ChevronRight className="w-4 h-4" />
@@ -442,7 +586,7 @@ export default function Budget() {
                   <button
                     onClick={handleAddExpense}
                     disabled={!newExpense.amount || !newExpense.description}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl pv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Check className="w-5 h-5" />
                     Dodaj wydatek
@@ -456,8 +600,8 @@ export default function Budget() {
 
       {/* Set Budget Modal */}
       {showSetBudget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowSetBudget(false)}>
+          <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h3 className="font-semibold text-gray-900">Ustaw budżet miesięczny</h3>
               <button
@@ -483,10 +627,10 @@ export default function Budget() {
                 />
               </div>
 
-              <div className="bg-brand-mint border border-blue-200 rounded-xl p-4">
+              <div className="bg-brand-mint border border-brand-light rounded-2xl p-4">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-brand-dark mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-blue-900">
+                  <p className="text-sm text-brand-dark">
                     Ustaw realistyczny budżet uwzględniający karmę, leczenie, akcesoria i inne wydatki.
                   </p>
                 </div>
@@ -495,14 +639,14 @@ export default function Budget() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowSetBudget(false)}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-all"
+                  className="pv-btn-ghost flex-1 px-4 py-2.5"
                 >
                   Anuluj
                 </button>
                 <button
                   onClick={handleSetBudget}
                   disabled={!budgetAmount}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl pv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Check className="w-5 h-5" />
                   Zapisz
@@ -512,6 +656,16 @@ export default function Budget() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Usuń wydatek"
+        description={`Czy na pewno usunąć wydatek${deleteTarget ? ` „${deleteTarget.description}" (${deleteTarget.amount.toFixed(2)} zł)` : ''}?`}
+        confirmLabel="Usuń"
+        cancelLabel="Anuluj"
+        onConfirm={handleDeleteExpense}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

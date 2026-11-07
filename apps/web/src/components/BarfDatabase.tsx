@@ -95,7 +95,7 @@ export default function BarfDatabase() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Szukaj składnika..."
-            className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           />
         </div>
 
@@ -103,7 +103,7 @@ export default function BarfDatabase() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Wszystkie kategorie</option>
             {categoryOptions.map((c) => (
@@ -119,7 +119,7 @@ export default function BarfDatabase() {
           <select
             value={species}
             onChange={(e) => setSpecies(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Pies i kot</option>
             <option value="dog">Pies</option>
@@ -132,7 +132,7 @@ export default function BarfDatabase() {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Wszystkie statusy</option>
             <option value="good">Zalecane</option>
@@ -144,12 +144,13 @@ export default function BarfDatabase() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-gray-500">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-          Ładowanie bazy BARF...
+        <div className="space-y-4 animate-fade-in">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="pv-skeleton h-28 rounded-3xl" />
+          ))}
         </div>
       ) : ingredients.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
+        <div className="pv-card p-14 text-center">
           <p className="text-gray-500 text-sm">Brak składników spełniających kryteria wyszukiwania</p>
         </div>
       ) : (
@@ -162,7 +163,7 @@ export default function BarfDatabase() {
               <div key={ing.id} className={`p-5 rounded-2xl border ${style.border} ${style.bg} flex flex-col gap-3`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-brand-mint flex items-center justify-center flex-shrink-0">
                       <CategoryIcon className="w-5 h-5 text-brand-dark" />
                     </div>
                     <div>

@@ -31,12 +31,17 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onClose();
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
       document.body.classList.remove('modal-open');
     };
-  }, []);
+  }, [onClose, submitting]);
 
   const update = (key: keyof typeof form, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -62,7 +67,13 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
       }
       return true;
     }
-    if (step === 3) return true;
+    if (step === 3) {
+      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) {
+        setError('Podaj prawidłowy adres e-mail albo zostaw pole puste');
+        return false;
+      }
+      return true;
+    }
     return true;
   };
 
@@ -120,8 +131,8 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-fade-in p-4" onClick={() => !submitting && onClose()}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-brand-dark/10 flex items-center justify-center">
@@ -136,15 +147,17 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
 
         <div className="p-5">
           {success ? (
-            <div className="text-center py-8">
-              <CheckCircle2 className="w-12 h-12 text-brand-dark mx-auto mb-4" />
+            <div className="text-center py-8 animate-pop-in">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-brand-mint flex items-center justify-center animate-pop-in">
+                <CheckCircle2 className="w-8 h-8 text-brand-dark" />
+              </div>
               <h4 className="font-semibold text-gray-900 mb-1">Zgłoszenie wysłane</h4>
               <p className="text-sm text-gray-500 mb-6">
                 Dietetyk zostanie opublikowany po weryfikacji przez administratora.
               </p>
               <button
                 onClick={onClose}
-                className="px-5 py-2.5 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all"
+                className="px-5 py-2.5 rounded-xl pv-btn-primary"
               >
                 Zamknij
               </button>
@@ -185,9 +198,10 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
+                        maxLength={255}
                         value={form.name}
                         onChange={(e) => update('name', e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-dark/50"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm pl-10 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                         placeholder="np. Jan Kowalski"
                       />
                     </div>
@@ -198,9 +212,10 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Miasto</label>
                       <input
                         type="text"
+                        maxLength={100}
                         value={form.city}
                         onChange={(e) => update('city', e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                         placeholder="Warszawa"
                       />
                     </div>
@@ -208,9 +223,10 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Adres</label>
                       <input
                         type="text"
+                        maxLength={255}
                         value={form.address}
                         onChange={(e) => update('address', e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                         placeholder="ul. Przykładowa 1"
                       />
                     </div>
@@ -220,9 +236,10 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                     <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Cennik (opcjonalnie)</label>
                     <input
                       type="text"
+                      maxLength={255}
                       value={form.priceInfo}
                       onChange={(e) => update('priceInfo', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
+                      className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                       placeholder="np. od 150 zł/konsultacja"
                     />
                   </div>
@@ -234,8 +251,9 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       <textarea
                         value={form.description}
                         onChange={(e) => update('description', e.target.value)}
+                        maxLength={2000}
                         rows={3}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-dark/50 resize-none"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm pl-10 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 resize-none"
                         placeholder="Krótki opis specjalizacji żywieniowej i doświadczenia"
                       />
                     </div>
@@ -250,10 +268,11 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                     <div className="relative">
                       <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
-                        type="text"
+                        type="tel"
+                        maxLength={30}
                         value={form.phone}
                         onChange={(e) => update('phone', e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm focus:outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm pl-10 pr-3.5 py-2.5 text-sm focus:outline-none"
                         placeholder="+48 600 000 000"
                       />
                     </div>
@@ -265,7 +284,7 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       type="email"
                       value={form.email}
                       onChange={(e) => update('email', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
+                      className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                       placeholder="kontakt@przykład.pl"
                     />
                   </div>
@@ -276,9 +295,10 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                       <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
+                        maxLength={255}
                         value={form.website}
                         onChange={(e) => update('website', e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm focus:outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm pl-10 pr-3.5 py-2.5 text-sm focus:outline-none"
                         placeholder="https://..."
                       />
                     </div>
@@ -289,7 +309,7 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                     onClick={handleUseLocation}
                     disabled={locating}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-                      form.latitude != null ? 'bg-brand-dark/10 text-brand-dark' : 'bg-brand-dark/10 text-brand-dark hover:bg-brand-dark/20'
+                      form.latitude != null ? 'bg-brand-mint text-brand-dark' : 'bg-brand-dark/10 text-brand-dark hover:bg-brand-dark/20'
                     }`}
                   >
                     {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
@@ -327,7 +347,7 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                 {step < 4 ? (
                   <button
                     onClick={nextStep}
-                    className="inline-flex items-center gap-1 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-dark text-white hover:bg-brand-dark transition-all"
+                    className="inline-flex items-center gap-1 px-5 py-2.5 rounded-xl text-sm font-medium pv-btn-primary"
                   >
                     Dalej <ChevronRight className="w-4 h-4" />
                   </button>
@@ -335,7 +355,7 @@ export default function AddDietitianModal({ onClose }: { onClose: () => void }) 
                   <button
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-dark text-white hover:bg-brand-dark transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium pv-btn-primary disabled:opacity-50"
                   >
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     Wyślij do weryfikacji

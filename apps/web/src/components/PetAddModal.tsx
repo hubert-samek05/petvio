@@ -1,9 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Camera, PawPrint } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { petApi } from '@/lib/api';
+import {
+  PetFormData, EMPTY_PET_FORM, Field, inputCls,
+  SpeciesPicker, GenderPicker, PhotoPicker, PetPreview,
+  speciesInfo, genderLabel, todayDateInput,
+} from '@/components/PetForm';
 
 type PetAddModalProps = {
   isOpen: boolean;
@@ -13,34 +18,17 @@ type PetAddModalProps = {
 
 export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalProps) {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({
-    name: '',
-    species: 'dog',
-    breed: '',
-    birthDate: '',
-    gender: '',
-    weight: '',
-    microchipNumber: '',
-    photoUrl: '',
-  });
+  const [form, setForm] = useState<PetFormData>(EMPTY_PET_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+
+  const set = (patch: Partial<PetFormData>) => setForm((f) => ({ ...f, ...patch }));
 
   useEffect(() => {
     if (!isOpen) return;
     setStep(1);
     setError('');
-    setForm({
-      name: '',
-      species: 'dog',
-      breed: '',
-      birthDate: '',
-      gender: '',
-      weight: '',
-      microchipNumber: '',
-      photoUrl: '',
-    });
+    setForm(EMPTY_PET_FORM);
   }, [isOpen]);
 
   useEffect(() => {
@@ -70,26 +58,19 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
     };
   }, [isOpen]);
 
-  const stepTitles = ['Podstawowe dane', 'Szczegóły', 'Zdjęcie i podsumowanie'];
+  const stepTitles = ['Pupil', 'Szczegóły', 'Zdjęcie i podsumowanie'];
 
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
 
-  const speciesLabel = (s: string) =>
-    s === 'dog' ? 'Pies' : s === 'cat' ? 'Kot' : 'Inne';
-
-  const genderLabel = (g: string) =>
-    g === 'male' ? 'Samiec' : g === 'female' ? 'Samica' : '—';
-
   const stepValid = () => {
     if (step === 1) return !!form.name.trim() && !!form.species;
-    if (step === 2) return true;
     return true;
   };
 
   const nextStep = () => {
     if (!stepValid()) {
-      setError('Uzupełnij wymagane pola, aby przejść dalej');
+      setError('Podaj imię zwierzęcia, aby przejść dalej');
       return;
     }
     setError('');
@@ -97,37 +78,6 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
   };
 
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Zdjęcie nie może być większe niż 5 MB');
-      return;
-    }
-    const src = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const max = 512;
-      const ratio = Math.min(max / img.width, max / img.height, 1);
-      const w = Math.round(img.width * ratio);
-      const h = Math.round(img.height * ratio);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(img, 0, 0, w, h);
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
-      setForm((f) => ({ ...f, photoUrl: base64 }));
-      setError('');
-      URL.revokeObjectURL(src);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(src);
-      setError('Nie udało się wczytać zdjęcia');
-    };
-    img.src = src;
-  };
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.species) {
@@ -160,8 +110,8 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain">
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative bg-white rounded-[28px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-y-contain animate-scale-in">
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm px-5 sm:px-8 pt-6 sm:pt-8 pb-4 rounded-t-3xl z-10">
           <div className="flex items-start justify-between">
             <div>
@@ -182,7 +132,7 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
 
         <div className="px-5 sm:px-8 pb-6 sm:pb-8">
           {error && (
-            <div className="mb-5 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">
+            <div className="mb-5 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium animate-slide-down">
               {error}
             </div>
           )}
@@ -210,147 +160,110 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
             ))}
           </div>
 
-          {/* Step 1 */}
+          {/* Krok 1: imię + gatunek */}
           {step === 1 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <WizardField label="Imię">
+            <div className="space-y-4 animate-fade-in">
+              <Field label="Imię zwierzęcia" full>
                 <input
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(e) => set({ name: e.target.value })}
                   placeholder="np. Burek"
-                  className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none"
+                  className={inputCls}
+                  autoFocus
                 />
-              </WizardField>
-              <WizardField label="Gatunek">
-                <select
-                  value={form.species}
-                  onChange={(e) => setForm({ ...form, species: e.target.value })}
-                  className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
-                >
-                  <option value="dog">Pies</option>
-                  <option value="cat">Kot</option>
-                  <option value="other">Inne</option>
-                </select>
-              </WizardField>
-              <WizardField label="Rasa" optional full>
-                <input
-                  type="text"
-                  value={form.breed}
-                  onChange={(e) => setForm({ ...form, breed: e.target.value })}
-                  placeholder="np. Golden Retriever"
-                  className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none"
-                />
-              </WizardField>
+              </Field>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2.5">Gatunek</p>
+                <SpeciesPicker value={form.species} onChange={(v) => set({ species: v })} />
+              </div>
             </div>
           )}
 
-          {/* Step 2 */}
+          {/* Krok 2: szczegóły */}
           {step === 2 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <WizardField label="Data urodzenia" optional>
-                <input
-                  type="date"
-                  value={form.birthDate}
-                  onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
-                  className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
-                />
-              </WizardField>
-              <WizardField label="Płeć" optional>
-                <select
-                  value={form.gender}
-                  onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                  className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
-                >
-                  <option value="">Wybierz</option>
-                  <option value="male">Samiec</option>
-                  <option value="female">Samica</option>
-                </select>
-              </WizardField>
-              <WizardField label="Waga (kg)" optional>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.weight}
-                  onChange={(e) => setForm({ ...form, weight: e.target.value })}
-                  placeholder="np. 12.5"
-                  className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none"
-                />
-              </WizardField>
-              <WizardField label="Numer mikroczipu" optional>
-                <input
-                  type="text"
-                  value={form.microchipNumber}
-                  onChange={(e) => setForm({ ...form, microchipNumber: e.target.value })}
-                  placeholder="np. 123456789012345"
-                  className="w-full bg-transparent text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none"
-                />
-              </WizardField>
+            <div className="space-y-4 animate-fade-in">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Rasa" optional>
+                  <input
+                    type="text"
+                    value={form.breed}
+                    onChange={(e) => set({ breed: e.target.value })}
+                    placeholder="np. Golden Retriever"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Data urodzenia" optional>
+                  <input
+                    type="date"
+                    value={form.birthDate}
+                    onChange={(e) => set({ birthDate: e.target.value })}
+                    max={todayDateInput()}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Waga" optional>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={form.weight}
+                      onChange={(e) => set({ weight: e.target.value })}
+                      placeholder="np. 12.5"
+                      className={inputCls}
+                    />
+                    <span className="text-sm font-semibold text-gray-400 flex-shrink-0">kg</span>
+                  </div>
+                </Field>
+                <Field label="Numer mikroczipu" optional>
+                  <input
+                    type="text"
+                    value={form.microchipNumber}
+                    onChange={(e) => set({ microchipNumber: e.target.value })}
+                    placeholder="np. 123456789012345"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2.5">Płeć</p>
+                <GenderPicker value={form.gender} onChange={(v) => set({ gender: v })} />
+              </div>
             </div>
           )}
 
-          {/* Step 3 */}
+          {/* Krok 3: zdjęcie + podsumowanie */}
           {step === 3 && (
-            <div className="space-y-4">
-              <WizardField label="Zdjęcie" optional full>
-                <div className="flex flex-col items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    className="group relative w-28 h-28 rounded-full overflow-hidden bg-gradient-to-br from-brand-dark to-brand ring-4 ring-gray-100"
-                  >
-                    {form.photoUrl ? (
-                      <img src={form.photoUrl} alt="Podgląd" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white">
-                        <PawPrint className="w-10 h-10" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Camera className="w-7 h-7 text-white" />
-                    </div>
-                  </button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <p className="text-sm text-gray-500">Kliknij okrąg, aby dodać zdjęcie</p>
-                </div>
-              </WizardField>
+            <div className="space-y-5 animate-fade-in">
+              <Field label="Zdjęcie" optional full>
+                <PhotoPicker
+                  photoUrl={form.photoUrl}
+                  species={form.species}
+                  onChange={(b64) => set({ photoUrl: b64 })}
+                  onError={setError}
+                />
+              </Field>
 
-              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+              <div className="p-5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Podsumowanie</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <PetPreview form={form} />
+                <div className="grid grid-cols-2 gap-4 mt-5">
                   <div>
-                    <p className="text-sm text-gray-500">Imię</p>
-                    <p className="font-medium text-gray-900">{form.name || '—'}</p>
+                    <p className="text-xs text-gray-500">Gatunek</p>
+                    <p className="font-medium text-gray-900 text-sm">{speciesInfo(form.species).label}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Gatunek</p>
-                    <p className="font-medium text-gray-900">{speciesLabel(form.species)}</p>
+                    <p className="text-xs text-gray-500">Data urodzenia</p>
+                    <p className="font-medium text-gray-900 text-sm">{formatDate(form.birthDate)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Rasa</p>
-                    <p className="font-medium text-gray-900">{form.breed || '—'}</p>
+                    <p className="text-xs text-gray-500">Płeć</p>
+                    <p className="font-medium text-gray-900 text-sm">{genderLabel(form.gender)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Data urodzenia</p>
-                    <p className="font-medium text-gray-900">{formatDate(form.birthDate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Płeć</p>
-                    <p className="font-medium text-gray-900">{genderLabel(form.gender)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Waga</p>
-                    <p className="font-medium text-gray-900">{form.weight ? `${form.weight} kg` : '—'}</p>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <p className="text-sm text-gray-500">Numer mikroczipu</p>
-                    <p className="font-medium text-gray-900">{form.microchipNumber || '—'}</p>
+                    <p className="text-xs text-gray-500">Mikroczip</p>
+                    <p className="font-medium text-gray-900 text-sm">{form.microchipNumber || '—'}</p>
                   </div>
                 </div>
               </div>
@@ -361,7 +274,7 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
             {step > 1 && (
               <button
                 onClick={prevStep}
-                className="px-8 py-3.5 rounded-full border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                className="px-8 py-3.5 rounded-full pv-btn-ghost flex items-center justify-center gap-2"
               >
                 <ChevronLeft className="w-4 h-4" /> Wstecz
               </button>
@@ -369,7 +282,7 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
             {step < 3 ? (
               <button
                 onClick={nextStep}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
               >
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
@@ -377,9 +290,9 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50"
               >
-                {saving ? 'Zapisywanie...' : 'Dodaj zwierzę'}
+                {saving ? 'Zapisywanie…' : 'Dodaj zwierzę'}
               </button>
             )}
           </div>
@@ -387,31 +300,5 @@ export default function PetAddModal({ isOpen, onClose, onSaved }: PetAddModalPro
       </div>
     </div>,
     document.body
-  );
-}
-
-function WizardField({
-  label,
-  optional,
-  children,
-  full,
-}: {
-  label: string;
-  optional?: boolean;
-  children: React.ReactNode;
-  full?: boolean;
-}) {
-  return (
-    <div
-      className={`p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
-        full ? 'sm:col-span-2' : ''
-      }`}
-    >
-      <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-        {label}
-        {optional && <span className="normal-case font-normal text-gray-400"> (opcjonalnie)</span>}
-      </label>
-      {children}
-    </div>
   );
 }

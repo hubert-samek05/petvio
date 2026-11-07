@@ -1,1152 +1,845 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { 
-  AlertTriangle, 
-  Phone, 
-  MapPin, 
-  Heart, 
-  Thermometer, 
-  Wind, 
-  Bone, 
-  Eye, 
-  Stethoscope,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Navigation,
-  PawPrint,
-  BookOpen,
-  CheckCircle2,
-  XCircle,
-  Info,
-  Zap,
-  Droplets,
-  Activity,
-  Shield,
-  Syringe,
-  Pill,
-  Bug,
-  Fish,
-  Candy,
-  Baby,
-  Sparkles,
-  Search,
-  Filter,
-  Crosshair,
-  Loader2,
-  Settings
+import { useState, useEffect, useRef } from 'react';
+import { petApi, userPreferencesApi } from '@/lib/api';
+import {
+  Phone, MapPin, ChevronRight, Navigation, BookOpen,
+  CheckCircle2, XCircle, Info, Search, Crosshair, Loader2, Settings,
+  Siren, Play, Pause, RotateCcw, Volume2, VolumeX, X, Shield, Clock, AlertTriangle,
 } from 'lucide-react';
+import {
+  PROCEDURES, CATEGORIES, URGENCY_CFG, KIT_ITEMS, VET_CONTACTS,
+  SPECIES_EMOJI, EmergencyProcedure, EmergencyClinic,
+} from './firstAidData';
 
-interface EmergencyProcedure {
-  id: string;
-  title: string;
-  icon: any;
-  category: 'critical' | 'urgent' | 'common' | 'injuries' | 'poisoning' | 'respiratory' | 'temperature';
-  urgency: 'critical' | 'urgent' | 'moderate';
-  symptoms: string[];
-  steps: string[];
-  donts: string[];
-  duration: string;
-  visualGuide?: string;
-}
-
-interface EmergencyClinic {
-  id: string;
-  name: string;
-  address: string;
-  phone: string;
-  distance: number;
-  is24h: boolean;
-  coordinates: { lat: number; lng: number };
-  services: string[];
-}
+type Tab = 'sos' | 'procedures' | 'clinics' | 'kit';
 
 export default function FirstAid() {
+  const [tab, setTab] = useState<Tab>('sos');
+  const [pets, setPets] = useState<any[]>([]);
+  const [selectedPet, setSelectedPet] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  // Tryb kroków
+  const [activeProcedure, setActiveProcedure] = useState<EmergencyProcedure | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [doneSteps, setDoneSteps] = useState<number[]>([]);
+  const [showDonts, setShowDonts] = useState(false);
+  // Stoper
+  const [timerSec, setTimerSec] = useState(0);
+  const [timerOn, setTimerOn] = useState(false);
+  // Metronom RKO (~110 BPM)
+  const [metroOn, setMetroOn] = useState(false);
+  const [metroSound, setMetroSound] = useState(true);
+  const [metroTick, setMetroTick] = useState(false);
+  const audioRef = useRef<AudioContext | null>(null);
+  // Lecznice
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [nearbyClinics, setNearbyClinics] = useState<EmergencyClinic[]>([]);
-  const [selectedProcedure, setSelectedProcedure] = useState<EmergencyProcedure | null>(null);
-  const [activeTab, setActiveTab] = useState<'procedures' | 'clinics' | 'contacts'>('procedures');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [locating, setLocating] = useState(false);
-  const [locationState, setLocationState] = useState<'idle' | 'denied' | 'granted' | 'unsupported'>('idle');
-
-  const emergencyProcedures: EmergencyProcedure[] = [
-    // Critical - Life Threatening
-    {
-      id: 'cpr',
-      title: 'RKO - Resuscytacja',
-      icon: Heart,
-      category: 'critical',
-      urgency: 'critical',
-      symptoms: ['Brak oddechu', 'Brak pulsu', 'Nieprzytomność', 'Blade błony śluzowe'],
-      steps: [
-        'Sprawdź bezpieczeństwo otoczenia',
-        'Ułóż zwierzę na boku na twardej powierzchni',
-        'Rozszerz szyję, wyciągnij język do przodu',
-        'Sprawdź oddech (patrz, słuchaj, czuj) przez 10 sekund',
-        'Brak oddechu - rozpocznij RKO',
-        'Dłonie na klatce piersiowej za łokciami',
-        '30 uciśnięć (100-120/min) + 2 wdmuchi',
-        'Zamknij pysk, dmuchaj przez nos',
-        'Kontynuuj cykl 30:2 do przyjazdu pomocy',
-        'Transportuj do lecznicy natychmiast'
-      ],
-      donts: ['Nie wkładaj palców w gardło', 'Nie podawaj leków doustnie', 'Nie wstrząsaj zwierzęciem', 'Każda sekunda liczy się'],
-      duration: 'Natychmiastowe działanie',
-      visualGuide: 'cpr'
-    },
-    {
-      id: 'choking',
-      title: 'Uduszenie',
-      icon: Wind,
-      category: 'respiratory',
-      urgency: 'critical',
-      symptoms: ['Głośne oddychanie', 'Świszczący oddech', 'Wystawienie języka', 'Panika', 'Niemoc połknięcia'],
-      steps: [
-        'Otwórz pysk, sprawdź widoczną blokadę',
-        'Jeśli widoczny obiekt - usuń go bezpiecznie',
-        'Manewr Heimlicha - małe zwierzęta: trzymaj za nogi, głową w dół, potrząśnij',
-        'Manewr Heimlicha - duże zwierzęta: obejmij klatkę piersiowej, uciskaj w górę',
-        'Uderz mocno między łopatki (5 razy)',
-        'Sprawdź drogę oddechową po każdym manewrze',
-        'Jeśli nie skutkuje - natychmiast do lecznicy'
-      ],
-      donts: ['Nie wkładaj palców w gardło na ślepo', 'Nie używaj szczypiec', 'Nie podawaj wody', 'Uduszenie = śmierć'],
-      duration: 'Mniej niż 2 minuty',
-      visualGuide: 'choking'
-    },
-    {
-      id: 'overheating',
-      title: 'Udar cieplny',
-      icon: Thermometer,
-      category: 'temperature',
-      urgency: 'critical',
-      symptoms: ['Nadmierne ślinienie', 'Szybkie płytkie oddychanie', 'Czerwone błony śluzowe', 'Drżenia mięśni', 'Temp > 40°C'],
-      steps: [
-        'Natychmiast przenieś w chłodne miejsce',
-        'Zdejmij wszystkie akcesoria',
-        'Ochładzaj letnią wodą (nie lodowatą!)',
-        'Skup się na głowie, szyi, pachwinach',
-        'Użyj wentylatora',
-        'Monitoruj temperaturę co 5 minut',
-        'Przestań ochładzać przy 39°C',
-        'Podawaj małe ilości wody (jeśli przytomne)',
-        'Transportuj do lecznicy'
-      ],
-      donts: ['Nie używaj lodu', 'Nie owijaj w mokre ręczniki', 'Nie zmuszaj do picia jeśli nieprzytomne'],
-      duration: 'Do 15 minut',
-      visualGuide: 'overheating'
-    },
-    {
-      id: 'hypothermia',
-      title: 'Hipotermia',
-      icon: Thermometer,
-      category: 'temperature',
-      urgency: 'urgent',
-      symptoms: ['Dreszcze', 'Słaby puls', 'Powolne oddychanie', 'Blade błony', 'Sztywność mięśni', 'Temp < 37°C'],
-      steps: [
-        'Przenieś do ciepłego suchego miejsca',
-        'Owiń w ciepłe koce',
-        'Użyj termoforów (ciepłe, nie gorące)',
-        'Skup się na tułowiu',
-        'Monitoruj temperaturę',
-        'Podawaj ciepłe płyny (jeśli przytomne)',
-        'Unikaj gwałtownego ogrzewania',
-        'Transportuj do lecznicy'
-      ],
-      donts: ['Nie używaj gorącej wody', 'Nie masuj kończyn', 'Nie podawaj alkoholu'],
-      duration: 'Stopniowe ogrzewanie',
-      visualGuide: 'hypothermia'
-    },
-    {
-      id: 'poisoning',
-      title: 'Zatrucie',
-      icon: AlertTriangle,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Wymioty', 'Biegunka', 'Niepokój', 'Drgawki', 'Ślinienie się', 'Nietypowy zapach'],
-      steps: [
-        'Zidentyfikuj truciznę',
-        'Zadzwoń na linię weterynaryjną',
-        'Nie wywołuj wymiotów (chyba że zaleci lekarz)',
-        'Zbierz próbkę wymioców',
-        'Zabierz opakowanie trucizny',
-        'Transportuj do lecznicy natychmiast',
-        'Informuj lekarza o wszystkim co zjadło'
-      ],
-      donts: ['Nie wywołuj wymiotów samodzielnie', 'Nie podawaj mleka', 'Nie czekaj na objawy'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'poisoning'
-    },
-    {
-      id: 'seizures',
-      title: 'Drgawki',
-      icon: Zap,
-      category: 'critical',
-      urgency: 'urgent',
-      symptoms: ['Drżenia ciała', 'Utrata przytomności', 'Sztywność mięśni', 'Ślinienie się', 'Niekontrolowane oddawanie moczu'],
-      steps: [
-        'Zachowaj spokój',
-        'Usuń niebezpieczne przedmioty',
-        'Nie wkładaj rąk do pyska',
-        'Zmierz czas trwania napadu',
-        'Ułóż zwierzę na boku',
-        'Chroń głowę przed uderzeniem',
-        'Po napadzie - utul zwierzę',
-        'Transportuj jeśli napad > 5 min lub powtarza się'
-      ],
-      donts: ['Nie wkładaj nic do pyska', 'Nie trzymaj siłą', 'Nie polewaj wodą'],
-      duration: 'Zazwyczaj 1-3 minuty',
-      visualGuide: 'seizures'
-    },
-    {
-      id: 'shock',
-      title: 'Wstrząs',
-      icon: Activity,
-      category: 'critical',
-      urgency: 'critical',
-      symptoms: ['Blade błony śluzowe', 'Szybkie słabe puls', 'Zimne kończyny', 'Słabość', 'Szybkie oddychanie'],
-      steps: [
-        'Utrzymaj drogi oddechowe otwarte',
-        'Ułóż zwierzę na boku',
-        'Ogrzej zwierzę',
-        'Transportuj do lecznicy natychmiast',
-        'Nie podawaj nic doustnie',
-        'Monitoruj parametry życiowe'
-      ],
-      donts: ['Nie podawaj doustnie', 'Nie zostawiaj samego', 'Nie czekaj'],
-      duration: 'Natychmiastowe działanie',
-      visualGuide: 'shock'
-    },
-    // Urgent
-    {
-      id: 'bleeding',
-      title: 'Krwotok',
-      icon: Droplets,
-      category: 'injuries',
-      urgency: 'urgent',
-      symptoms: ['Obfite krwawienie', 'Bladość', 'Słabość', 'Szybkie bicie serca'],
-      steps: [
-        'Bezpośredni ucisk na ranę',
-        'Użyj czystej gazy',
-        'Jeśli nie ustaje - opaska uciskowa',
-        'Opaska powyżej rany',
-        'Zapisz czas założenia',
-        'Poluzuj co 15-20 min na 1 min',
-        'Transportuj natychmiast',
-        'Utrzymaj spokój i ciepło'
-      ],
-      donts: ['Nie czyść rany głęboko', 'Nie stosuj środków drażniących', 'Nie usuń opatrunku'],
-      duration: 'Natychmiastowa kontrola',
-      visualGuide: 'bleeding'
-    },
-    {
-      id: 'fracture',
-      title: 'Złamanie',
-      icon: Bone,
-      category: 'injuries',
-      urgency: 'urgent',
-      symptoms: ['Nienaturalne ustawienie', 'Obrzęk', 'Ból', 'Niechęć do poruszania'],
-      steps: [
-        'Nie ruszaj złamanej kończyny',
-        'Unieruchomienie (szyna)',
-        'Użyj bandaża i sztywnego materiału',
-        'Unieruchom stawy powyżej i poniżej',
-        'Transportuj na tace lub w kocu',
-        'Unikaj nacisku na kończynę',
-        'Transportuj do lecznicy'
-      ],
-      donts: ['Nie prostuj kości', 'Nie masuj miejsca', 'Nie stosuj lodu bezpośrednio'],
-      duration: 'Natychmiastowe unieruchomienie',
-      visualGuide: 'fracture'
-    },
-    {
-      id: 'eye-injury',
-      title: 'Uraz oka',
-      icon: Eye,
-      category: 'injuries',
-      urgency: 'urgent',
-      symptoms: ['Zaczerwienienie', 'Zamknięcie powieki', 'Wyciek', 'Ocieranie oka'],
-      steps: [
-        'Nie dotykaj oka',
-        'Zastosuj kołnierz',
-        'Zabezpiecz przed drapaniem',
-        'Nie płucz wodą (chyba że chemikalia)',
-        'Transportuj natychmiast',
-        'Czas jest kluczowy'
-      ],
-      donts: ['Nie dotykaj oka', 'Nie stosuj kropli', 'Nie próbuj usunąć ciała obcego'],
-      duration: 'Natychmiastowa pomoc',
-      visualGuide: 'eye'
-    },
-    {
-      id: 'burns',
-      title: 'Oparzenia',
-      icon: Thermometer,
-      category: 'injuries',
-      urgency: 'urgent',
-      symptoms: ['Czerwona skóra', 'Pęcherze', 'Ból', 'Obrzęk', 'Zniszczona sierść'],
-      steps: [
-        'Chłodź wodą (nie lodowatą!) przez 15-20 min',
-        'Nie używaj lodu',
-        'Nie nakładaj maści',
-        'Oczyść ranę delikatnie',
-        'Zastosuj sterylny opatrunek',
-        'Transportuj do lecznicy'
-      ],
-      donts: ['Nie używaj lodu', 'Nie nakładaj maści', 'Nie przekłuwaj pęcherzy'],
-      duration: 'Natychmiastowe chłodzenie',
-      visualGuide: 'burns'
-    },
-    // Common
-    {
-      id: 'vomiting',
-      title: 'Wymioty',
-      icon: AlertTriangle,
-      category: 'common',
-      urgency: 'moderate',
-      symptoms: ['Wymioty', 'Niechęć do jedzenia', 'Apatia', 'Ślinienie się'],
-      steps: [
-        'Zabierz jedzenie na 12-24h',
-        'Podawaj małe ilości wody',
-        'Obserwuj częstotliwość',
-        'Jeśli > 24h - do lecznicy',
-        'Zapisz co zjadło',
-        'Transportuj jeśli inne objawy'
-      ],
-      donts: ['Nie zmuszaj do jedzenia', 'Nie podawaj leków bez konsultacji'],
-      duration: 'Obserwacja 24h',
-      visualGuide: 'vomiting'
-    },
-    {
-      id: 'diarrhea',
-      title: 'Biegunka',
-      icon: AlertTriangle,
-      category: 'common',
-      urgency: 'moderate',
-      symptoms: ['Ciekłe stolce', 'Częste wypróżnianie', 'Apatia', 'Utrata wagi'],
-      steps: [
-        'Dieta lekkostrawna',
-        'Małe częste posiłki',
-        'Dostarcz elektrolity',
-        'Obserwuj konsystencję',
-        'Jeśli > 48h - do lecznicy',
-        'Transportuj jeśli krew'
-      ],
-      donts: ['Nie podawaj leków przeciwbiegunkowych', 'Nie zmieniaj diety gwałtownie'],
-      duration: 'Obserwacja 48h',
-      visualGuide: 'diarrhea'
-    },
-    {
-      id: 'allergic-reaction',
-      title: 'Reakcja alergiczna',
-      icon: Shield,
-      category: 'common',
-      urgency: 'urgent',
-      symptoms: ['Swędzenie', 'Opuchlizna', 'Czerwone plamy', 'Trudności w oddychaniu'],
-      steps: [
-        'Zidentyfikuj alergen',
-        'Usuń źródło alergenu',
-        'Chłodź opuchliznę',
-        'Jeśli trudności w oddychaniu - RKO',
-        'Transportuj do lecznicy',
-        'Zapisz co zjadło/kontaktowało'
-      ],
-      donts: ['Nie podawaj leków bez konsultacji', 'Nie drapaj miejsca'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'allergy'
-    },
-    // Poisoning specific
-    {
-      id: 'chocolate',
-      title: 'Zatrucie czekoladą',
-      icon: Candy,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Wymioty', 'Drgawki', 'Szybkie bicie serca', 'Niepokój'],
-      steps: [
-        'Zidentyfikuj rodzaj i ilość czekolady',
-        'Im ciemniejsza - bardziej toksyczna',
-        'Transportuj do lecznicy natychmiast',
-        'Zabierz opakowanie',
-        'Nie wywołuj wymiotów bez konsultacji'
-      ],
-      donts: ['Nie czekaj na objawy', 'Czekolada jest toksyczna dla zwierząt'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'chocolate'
-    },
-    {
-      id: 'grapes',
-      title: 'Zatrucie winogronami',
-      icon: Candy,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Wymioty', 'Biegunka', 'Apatia', 'Niewydolność nerek'],
-      steps: [
-        'Zidentyfikuj ilość',
-        'Transportuj do lecznicy',
-        'Winogrona/rodzynki są toksyczne',
-        'Monitoruj parametry nerkowe'
-      ],
-      donts: ['Nie czekaj na objawy', 'Niewydolność nerek może być śmiertelna'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'grapes'
-    },
-    {
-      id: 'xylitol',
-      title: 'Zatrucie ksylitolem',
-      icon: Candy,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Wymioty', 'Słabość', 'Drgawki', 'Hipoglikemia'],
-      steps: [
-        'Sprawdź etykiety gumy/cukierków',
-        'Ksylitol jest bardzo toksyczny',
-        'Transportuj natychmiast',
-        'Monitoruj poziom glukozy'
-      ],
-      donts: ['Nie czekaj na objawy', 'Ksylitol powoduje hipoglikemię'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'xylitol'
-    },
-    {
-      id: 'antifreeze',
-      title: 'Zatrucie płynem chłodniczym',
-      icon: Droplets,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Wymioty', 'Drgawki', 'Dyszenie', 'Nieprzytomność'],
-      steps: [
-        'Płyn chłodniczy jest śmiertelnie toksyczny',
-        'Transportuj natychmiast',
-        'Zidentyfikuj substancję',
-        'Nie wywołuj wymiotów'
-      ],
-      donts: ['Nie czekaj - śmiertelne', 'Płyn chłodniczy = etylen glikol'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'antifreeze'
-    },
-    {
-      id: 'medication',
-      title: 'Zatrucie lekami',
-      icon: Pill,
-      category: 'poisoning',
-      urgency: 'critical',
-      symptoms: ['Zależne od leku', 'Wymioty', 'Drgawki', 'Nieprzytomność'],
-      steps: [
-        'Zidentyfikuj lek i dawkę',
-        'Zabierz opakowanie',
-        'Transportuj do lecznicy',
-        'Nie wywołuj wymiotów',
-        'Informuj lekarza o wszystkich lekach'
-      ],
-      donts: ['Nie podawaj żadnych leków', 'Nie czekaj na objawy'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'medication'
-    },
-    // Insect bites
-    {
-      id: 'bee-sting',
-      title: 'Użądlenie pszczoły',
-      icon: Bug,
-      category: 'injuries',
-      urgency: 'moderate',
-      symptoms: ['Opuchlizna', 'Ból', 'Czerwoność', 'Reakcja alergiczna'],
-      steps: [
-        'Usuń żądło jeśli widoczne',
-        'Zastosuj zimny okład',
-        'Obserwuj reakcję alergiczną',
-        'Jeśli reakcja alergiczna - do lecznicy',
-        'Monitoruj oddychanie'
-      ],
-      donts: ['Nie wyciskaj żądła', 'Nie drapaj'],
-      duration: 'Obserwacja 1-2h',
-      visualGuide: 'bee'
-    },
-    {
-      id: 'snake-bite',
-      title: 'Ugryzienie węża',
-      icon: Bug,
-      category: 'injuries',
-      urgency: 'critical',
-      symptoms: ['Dwa ślady kłów', 'Opuchlizna', 'Ból', 'Drgawki', 'Nieprzytomność'],
-      steps: [
-        'Transportuj do lecznicy natychmiast',
-        'Nie czyść rany',
-        'Nie uciskaj',
-        'Nie zastosuj opaski uciskowej',
-        'Zidentyfikuj węża jeśli bezpiecznie',
-        'Utrzymaj zwierzę w spokoju'
-      ],
-      donts: ['Nie czyść rany', 'Nie uciskaj', 'Nie stosuj opaski', 'Nie próbuj wyciągać jadu'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'snake'
-    },
-    // Respiratory
-    {
-      id: 'asthma',
-      title: 'Napad astmy',
-      icon: Wind,
-      category: 'respiratory',
-      urgency: 'urgent',
-      symptoms: ['Duszność', 'Świszczący oddech', 'Szybkie oddychanie', 'Niepokój'],
-      steps: [
-        'Utrzymaj spokój',
-        'Ułatwiaj oddychanie',
-        'Transportuj do lecznicy',
-        'Nie stresuj zwierzęcia',
-        'Monitoruj saturację jeśli możliwe'
-      ],
-      donts: ['Nie stresuj', 'Nie zmuszaj do ruchu'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'asthma'
-    },
-    {
-      id: 'pneumonia',
-      title: 'Zapalenie płuc',
-      icon: Wind,
-      category: 'respiratory',
-      urgency: 'urgent',
-      symptoms: ['Kaszel', 'Duszność', 'Gorączka', 'Apatia', 'Niechęć do jedzenia'],
-      steps: [
-        'Transportuj do lecznicy',
-        'Monitoruj temperaturę',
-        'Utrzymaj ciepło',
-        'Nie zmuszaj do ćwiczeń'
-      ],
-      donts: ['Nie zmuszaj do ruchu', 'Nie czekaj'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'pneumonia'
-    },
-    // Special
-    {
-      id: 'bloat',
-      title: 'Skręt żołądka',
-      icon: AlertTriangle,
-      category: 'critical',
-      urgency: 'critical',
-      symptoms: ['Napuchnięty brzuch', 'Nieudane wymioty', 'Niepokój', 'Duszność'],
-      steps: [
-        'Transportuj do lecznicy natychmiast',
-        'Skręt jest śmiertelny bez operacji',
-        'Nie podawaj jedzenia/wody',
-        'Nie zmuszaj do wymiotów',
-        'Każda minuta liczy się'
-      ],
-      donts: ['Nie czekaj - śmiertelne', 'Nie podawaj jedzenia', 'Nie zmuszaj do wymiotów'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'bloat'
-    },
-    {
-      id: 'dystocia',
-      title: 'Trudny poród',
-      icon: Baby,
-      category: 'critical',
-      urgency: 'critical',
-      symptoms: ['Silne skurcze > 30 min', 'Szkarlatynowe wycieki', 'Zmęczenie samicy', 'Martwy płód'],
-      steps: [
-        'Transportuj do lecznicy natychmiast',
-        'Nie ciągnij za płód',
-        'Monitoruj temperaturę',
-        'Zapisz czas trwania porodu'
-      ],
-      donts: ['Nie ciągnij za płód', 'Nie czekaj > 2h'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'dystocia'
-    },
-    {
-      id: 'heatstroke-cats',
-      title: 'Udar cieplny - koty',
-      icon: Thermometer,
-      category: 'temperature',
-      urgency: 'critical',
-      symptoms: ['Szybkie oddychanie', 'Ślinienie się', 'Czerwone błony', 'Nieprzytomność'],
-      steps: [
-        'Koty są bardzo wrażliwe na ciepło',
-        'Natychmiast ochładzaj',
-        'Transportuj do lecznicy',
-        'Nie zostawiaj w samochodzie'
-      ],
-      donts: ['Nie zostawiaj w samochodzie', 'Nie używaj lodu'],
-      duration: 'Natychmiastowa akcja',
-      visualGuide: 'heatstroke-cats'
-    },
-    {
-      id: 'fish-hook',
-      title: 'Haczyk w ciele',
-      icon: Fish,
-      category: 'injuries',
-      urgency: 'moderate',
-      symptoms: ['Haczyk w skórze', 'Ból', 'Krwawienie'],
-      steps: [
-        'Nie ciągnij haczyka',
-        'Transportuj do lecznicy',
-        'Jeśli blisko powierzchni - można usunąć',
-        'Zabezpiecz przed drapaniem'
-      ],
-      donts: ['Nie ciągnij haczyka', 'Nie próbuj wyciągać głęboko'],
-      duration: 'Jak najszybciej',
-      visualGuide: 'fishhook'
-    }
-  ];
-
-  const veterinaryContacts = [
-    { name: 'Całodobowa Klinika Weterynaryjna "Vet-24"', phone: '+48 22 123 45 67', address: 'Warszawa, ul. Medyczna 15', is24h: true },
-    { name: 'Przychodnia Weterynaryjna "Zdrowe Zwierzę"', phone: '+48 22 234 56 78', address: 'Warszawa, ul. Kwiatowa 8', is24h: true },
-    { name: 'Gabinet Weterynaryjny Dr. Kowalski', phone: '+48 22 345 67 89', address: 'Warszawa, ul. Leśna 23', is24h: false },
-    { name: 'Klinika Weterynaryjna "Animed"', phone: '+48 22 456 78 90', address: 'Warszawa, ul. Zielona 45', is24h: true },
-  ];
-
-  const categories = [
-    { id: 'all', name: 'Wszystkie', icon: Filter },
-    { id: 'critical', name: 'Krytyczne', icon: AlertTriangle, color: 'red' },
-    { id: 'respiratory', name: 'Oddechowe', icon: Wind, color: 'blue' },
-    { id: 'temperature', name: 'Temperatura', icon: Thermometer, color: 'orange' },
-    { id: 'poisoning', name: 'Zatrucia', icon: Pill, color: 'purple' },
-    { id: 'injuries', name: 'Urazy', icon: Bone, color: 'green' },
-    { id: 'common', name: 'Powszechne', icon: Shield, color: 'gray' },
-  ];
+  const [locationState, setLocationState] = useState<'idle' | 'denied' | 'granted' | 'unsupported' | 'unavailable'>('idle');
+  const [clinicsLoading, setClinicsLoading] = useState(false);
+  const [clinicsError, setClinicsError] = useState('');
+  // Apteczka
+  const [kitDone, setKitDone] = useState<string[]>([]);
+  const [kitError, setKitError] = useState('');
+  const [petsError, setPetsError] = useState('');
 
   useEffect(() => {
-    // Don't auto-request location - user must click button
-    // Load default clinics without location
-    findNearbyClinics(52.2297, 21.0122);
+    loadPets();
+    // Checklista apteczki — z serwera; migracja starego klucza localStorage
+    (async () => {
+      const legacy = localStorage.getItem('firstAidKit');
+      try {
+        const res = await userPreferencesApi.get('first_aid_kit');
+        if (Array.isArray(res.value)) {
+          setKitDone(res.value.filter((x: any) => typeof x === 'string'));
+        } else if (legacy) {
+          try {
+            const arr = JSON.parse(legacy);
+            if (Array.isArray(arr) && arr.length > 0) {
+              setKitDone(arr.filter((x: any) => typeof x === 'string'));
+              await userPreferencesApi.set('first_aid_kit', arr.filter((x: any) => typeof x === 'string'));
+            }
+          } catch {}
+        }
+        if (legacy) localStorage.removeItem('firstAidKit');
+      } catch {
+        // API niedostępne — pokaż lokalną kopię, zapis zsynchronizuje się przy kolejnym odhaczaniu
+        if (legacy) {
+          try {
+            const arr = JSON.parse(legacy);
+            if (Array.isArray(arr)) setKitDone(arr.filter((x: any) => typeof x === 'string'));
+          } catch {}
+        }
+        setKitError('Checklista nie zsynchronizowała się z serwerem — zmiany mogą nie być widoczne na innych urządzeniach.');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLocate = () => {
-    if (!navigator.geolocation) {
-      setLocationState('unsupported');
-      return;
+  // Gdyby użytkownik wyszedł ze strony z otwartym trybem kroków — zawsze przywróć scroll
+  useEffect(() => () => { document.body.style.overflow = ''; }, []);
+
+  const loadPets = () => {
+    setPetsError('');
+    petApi.getAll().then((res) => {
+      const list = res.pets || res || [];
+      setPets(list);
+      if (list.length > 0) setSelectedPet(String(list[0].id));
+    }).catch(() => setPetsError('Nie udało się pobrać listy zwierząt.'));
+  };
+
+  useEffect(() => {
+    if (!timerOn) return;
+    const t = setInterval(() => setTimerSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [timerOn]);
+
+  useEffect(() => {
+    if (!metroOn) return;
+    const interval = setInterval(() => {
+      setMetroTick((v) => !v);
+      if (metroSound && audioRef.current) {
+        try {
+          const ctx = audioRef.current;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.08);
+        } catch {}
+      }
+    }, 545);
+    return () => clearInterval(interval);
+  }, [metroOn, metroSound]);
+
+  const openProcedure = (p: EmergencyProcedure) => {
+    setActiveProcedure(p);
+    setStepIdx(0);
+    setDoneSteps([]);
+    setShowDonts(false);
+    setTimerSec(0);
+    setTimerOn(false);
+    setMetroOn(false);
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeProcedure = () => {
+    setActiveProcedure(null);
+    setMetroOn(false);
+    setTimerOn(false);
+    document.body.style.overflow = '';
+  };
+
+  const toggleStep = (i: number) => {
+    const wasDone = doneSteps.includes(i);
+    setDoneSteps((d) => (wasDone ? d.filter((x) => x !== i) : [...d, i]));
+    if (wasDone) {
+      // Odchaczenie — wróć do tego kroku
+      setStepIdx(i);
+    } else if (i === stepIdx && stepIdx < (activeProcedure?.steps.length || 0) - 1) {
+      // Odhaczono bieżący krok — przejdź do następnego
+      setStepIdx(stepIdx + 1);
     }
+  };
+
+  const startMetronome = () => {
+    if (!audioRef.current) {
+      try { audioRef.current = new (window.AudioContext || (window as any).webkitAudioContext)(); } catch {}
+    }
+    if (audioRef.current?.state === 'suspended') audioRef.current.resume();
+    setMetroOn(true);
+  };
+
+  const currentPet = pets.find((p) => String(p.id) === selectedPet);
+  const petWeight = currentPet ? parseFloat(currentPet.weight) : NaN;
+  const isSmallPet = !isNaN(petWeight) && petWeight < 10;
+
+  const toggleKit = (id: string) => {
+    const next = kitDone.includes(id) ? kitDone.filter((k) => k !== id) : [...kitDone, id];
+    setKitDone(next);
+    setKitError('');
+    userPreferencesApi.set('first_aid_kit', next).catch(() => {
+      setKitError('Nie udało się zapisać checklisty na serwerze. Spróbuj ponownie.');
+    });
+  };
+
+  const distKm = (a: number, b: number, c: number, d: number) => {
+    const R = 6371, dLat = ((c - a) * Math.PI) / 180, dLng = ((d - b) * Math.PI) / 180;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos((a * Math.PI) / 180) * Math.cos((c * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+  };
+
+  const OSM_DAY: Record<string, number> = { Su: 0, Mo: 1, Tu: 2, We: 3, Th: 4, Fr: 5, Sa: 6 };
+  const DAY_PL: Record<string, string> = { Mo: 'Pn', Tu: 'Wt', We: 'Śr', Th: 'Cz', Fr: 'Pt', Sa: 'Sb', Su: 'Nd' };
+
+  // Czy lecznica jest teraz otwarta (parser formatu opening_hours z OSM)
+  const isOpenNow = (hours: string): boolean | null => {
+    if (!hours) return null;
+    if (/24\/7/.test(hours)) return true;
+    const now = new Date();
+    const day = now.getDay();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    for (const seg of hours.split(';')) {
+      const m = seg.trim().match(/^([A-Za-z,\s-]+?)\s+(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+      if (!m) continue;
+      const open = +m[2] * 60 + +m[3];
+      const close = +m[4] * 60 + +m[5];
+      for (const part of m[1].split(',')) {
+        const p = part.trim();
+        let dayMatch = false;
+        if (p.includes('-')) {
+          const [a, b] = p.split('-').map((x) => OSM_DAY[x.trim()]);
+          if (a != null && b != null) dayMatch = a <= b ? day >= a && day <= b : day >= a || day <= b;
+        } else if (OSM_DAY[p] != null) {
+          dayMatch = OSM_DAY[p] === day;
+        }
+        if (dayMatch && (close >= open ? mins >= open && mins < close : mins >= open || mins < close)) return true;
+      }
+    }
+    return false;
+  };
+
+  // Godziny po polsku: "Mo-Fr 09:00-21:00; Sa 10:00-16:00" → "Pn–Pt 09:00–21:00 • Sb 10:00–16:00"
+  const fmtHoursPl = (hours: string): string => {
+    if (/24\/7/.test(hours)) return 'Otwarte 24/7';
+    return hours
+      .split(';')
+      .map((s) => s.trim().replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/g, (d) => DAY_PL[d] || d).replace(/(\w)-(\w)/, '$1–$2'))
+      .join(' • ');
+  };
+
+  const clinicRank = (c: EmergencyClinic) => {
+    if (c.is24h) return 0;
+    const o = isOpenNow(c.hours);
+    return o === true ? 1 : o === null ? 2 : 3;
+  };
+
+  const OVERPASS_MIRRORS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+  ];
+
+  // Jeden zapytanie Overpass: wszystkie amenity=veterinary w promieniu 15 km
+  // z pełnymi tagami (telefon, godziny) — bez dodatkowych requestów.
+  // Mirrory są odpytywane RÓWNOLEGLE — wygrywa najszybszy, reszta jest przerywana.
+  const queryOverpass = async (lat: number, lng: number): Promise<any[]> => {
+    const q = `[out:json][timeout:20];
+      (
+        node["amenity"="veterinary"](around:15000,${lat},${lng});
+        way["amenity"="veterinary"](around:15000,${lat},${lng});
+      );
+      out center tags 40;`;
+    const attempt = (base: string): Promise<any[]> => {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 20000);
+      return fetch(base, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(q)}`,
+        signal: ctrl.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          const json = await res.json();
+          return json.elements || [];
+        })
+        .finally(() => clearTimeout(to));
+    };
+    // Ręczny „any": sukces pierwszego mirrora, błąd dopiero gdy wszystkie zawiodą
+    return new Promise((resolve, reject) => {
+      let failures = 0;
+      let settled = false;
+      OVERPASS_MIRRORS.forEach((base) => {
+        attempt(base).then(
+          (els) => { if (!settled) { settled = true; resolve(els); } },
+          () => { if (!settled && ++failures === OVERPASS_MIRRORS.length) { settled = true; reject(new Error('all mirrors failed')); } }
+        );
+      });
+    });
+  };
+
+  const findNearbyClinics = async (lat: number, lng: number) => {
+    setClinicsLoading(true);
+    setClinicsError('');
+    setNearbyClinics([]);
+    try {
+      const elements = await queryOverpass(lat, lng);
+      const seen = new Map<string, EmergencyClinic>();
+      for (const el of elements) {
+        const t = el.tags || {};
+        const cLat = el.lat ?? el.center?.lat;
+        const cLng = el.lon ?? el.center?.lon;
+        if (typeof cLat !== 'number' || typeof cLng !== 'number') continue;
+        const name = t.name || 'Lecznica weterynaryjna';
+        // Deduplikacja node+way tej samej placówki (po nazwie i ~150 m)
+        const key = `${name.toLowerCase()}|${Math.round(cLat * 500)}|${Math.round(cLng * 500)}`;
+        if (seen.has(key)) continue;
+        const street = t['addr:street'] ? `${t['addr:street']} ${t['addr:housenumber'] || ''}`.trim() : '';
+        const city = t['addr:city'] || t['addr:town'] || t['addr:village'] || '';
+        const hours = t.opening_hours || t['opening_hours:emergency'] || '';
+        const nameSuggests24h = /24\s*h|24\/7|całodob|nonstop|non-stop/i.test(`${name} ${t.description || ''}`);
+        seen.set(key, {
+          id: `${el.type}/${el.id}`,
+          name,
+          address: [street, city].filter(Boolean).join(', '),
+          phone: t.phone || t['contact:phone'] || t['contact:mobile'] || '',
+          distance: Math.round(distKm(lat, lng, cLat, cLng) * 10) / 10,
+          is24h: /24\/7|00:00-24:00/i.test(hours) || nameSuggests24h,
+          hours: hours || (nameSuggests24h ? '24/7' : ''),
+          coordinates: { lat: cLat, lng: cLng },
+          services: [],
+          osmType: el.type,
+          osmId: String(el.id),
+          emergency: t.emergency === 'yes',
+        });
+      }
+      const clinics: EmergencyClinic[] = [];
+      seen.forEach((c) => clinics.push(c));
+      clinics.sort((a, b) => a.distance - b.distance);
+      const top = clinics.slice(0, 25);
+      top.sort((a, b) => clinicRank(a) - clinicRank(b) || a.distance - b.distance);
+      setNearbyClinics(top);
+      if (top.length === 0) setClinicsError('Nie znaleziono lecznic w promieniu 15 km.');
+    } catch {
+      setClinicsError('Nie udało się pobrać lecznic (serwer map nie odpowiada). Spróbuj ponownie za chwilę.');
+    }
+    setClinicsLoading(false);
+  };
+
+  const handleLocate = () => {
+    if (!navigator.geolocation) { setLocationState('unsupported'); return; }
     setLocating(true);
     setLocationState('idle');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        });
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         findNearbyClinics(pos.coords.latitude, pos.coords.longitude);
         setLocating(false);
         setLocationState('granted');
       },
-      (error) => {
+      (err) => {
         setLocating(false);
-        if (error.code === 1) {
-          setLocationState('denied');
-        } else if (error.code === 2) {
-          setLocationState('unsupported');
-        } else {
-          setLocationState('denied');
-        }
+        // code 1 = odmowa zgody, 2 = pozycja niedostępna, 3 = timeout
+        setLocationState(err.code === 1 ? 'denied' : 'unavailable');
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000 }
     );
   };
 
-  const clearLocation = () => {
-    setUserLocation(null);
-    setLocationState('idle');
-    findNearbyClinics(52.2297, 21.0122);
-  };
-
-  const findNearbyClinics = (lat: number, lng: number) => {
-    const mockClinics: EmergencyClinic[] = [
-      {
-        id: '1',
-        name: 'Całodobowa Klinika Weterynaryjna "Vet-24"',
-        address: 'ul. Medyczna 15, Warszawa',
-        phone: '+48 22 123 45 67',
-        distance: 2.3,
-        is24h: true,
-        coordinates: { lat: lat + 0.01, lng: lng + 0.01 },
-        services: ['Chirurgia', 'Diagnostyka', 'Hospitalizacja', 'RTG', 'USG']
-      },
-      {
-        id: '2',
-        name: 'Przychodnia Weterynaryjna "Zdrowe Zwierzę"',
-        address: 'ul. Kwiatowa 8, Warszawa',
-        phone: '+48 22 234 56 78',
-        distance: 3.8,
-        is24h: true,
-        coordinates: { lat: lat - 0.01, lng: lng + 0.02 },
-        services: ['Chirurgia', 'Diagnostyka', 'Laboratorium']
-      },
-      {
-        id: '3',
-        name: 'Klinika Weterynaryjna "Animed"',
-        address: 'ul. Zielona 45, Warszawa',
-        phone: '+48 22 456 78 90',
-        distance: 5.1,
-        is24h: true,
-        coordinates: { lat: lat + 0.02, lng: lng - 0.01 },
-        services: ['Chirurgia', 'Diagnostyka', 'Hospitalizacja', 'RTG', 'USG', 'MRI', 'TK']
-      }
-    ];
-
-    setNearbyClinics(mockClinics.sort((a, b) => a.distance - b.distance));
-  };
-
-  const handleCall = (number: string) => {
-    window.location.href = `tel:${number}`;
-  };
-
-  const handleNavigate = (clinic: EmergencyClinic) => {
-    if (userLocation) {
-      const url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${clinic.coordinates.lat},${clinic.coordinates.lng}`;
-      window.open(url, '_blank');
-    }
-  };
-
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case 'critical': return 'bg-red-500';
-      case 'urgent': return 'bg-amber-500';
-      case 'moderate': return 'bg-brand-dark';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  const getUrgencyLabel = (urgency: string) => {
-    switch (urgency) {
-      case 'critical': return 'Krytyczne';
-      case 'urgent': return 'Pilne';
-      case 'moderate': return 'Umiarkowane';
-      default: return 'Standardowe';
-    }
-  };
-
-  const filteredProcedures = emergencyProcedures.filter(proc => {
-    const matchesCategory = selectedCategory === 'all' || proc.category === selectedCategory;
-    const matchesSearch = searchQuery === '' || 
-      proc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      proc.symptoms.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
+  const filteredProcedures = PROCEDURES.filter((p) => {
+    const catOk = selectedCategory === 'all' || p.category === selectedCategory;
+    const q = searchQuery.toLowerCase();
+    const qOk = !q || p.title.toLowerCase().includes(q) || p.symptoms.some((s) => s.toLowerCase().includes(q));
+    return catOk && qOk;
   });
 
-  const renderVisualGuide = (guide: string) => {
-    const guides: { [key: string]: JSX.Element } = {
-      cpr: (
-        <div className="bg-gray-100 rounded-xl p-4 mb-4">
-          <div className="text-center mb-4">
-            <div className="text-2xl font-bold text-brand-dark">30:2</div>
-            <div className="text-sm text-gray-600">Uciśnięcia : Wdmuchi</div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="bg-white p-3 rounded-lg">
-              <div className="font-semibold text-gray-700 mb-1">Uciśnięcia</div>
-              <div className="text-gray-600">100-120/min</div>
-              <div className="text-gray-600">Za łokciami</div>
-            </div>
-            <div className="bg-white p-3 rounded-lg">
-              <div className="font-semibold text-gray-700 mb-1">Wdmuchi</div>
-              <div className="text-gray-600">Zamknij pysk</div>
-              <div className="text-gray-600">Dmuchaj przez nos</div>
-            </div>
-          </div>
-        </div>
-      ),
-      choking: (
-        <div className="bg-gray-100 rounded-xl p-4 mb-4">
-          <div className="text-center mb-4">
-            <div className="text-lg font-bold text-brand-dark">Manewr Heimlicha</div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="bg-white p-3 rounded-lg">
-              <div className="font-semibold text-gray-700 mb-1">Małe zwierzęta</div>
-              <div className="text-gray-600">Trzymaj za nogi</div>
-              <div className="text-gray-600">Głową w dół</div>
-              <div className="text-gray-600">Potrząśnij</div>
-            </div>
-            <div className="bg-white p-3 rounded-lg">
-              <div className="font-semibold text-gray-700 mb-1">Duże zwierzęta</div>
-              <div className="text-gray-600">Obejmij klatkę</div>
-              <div className="text-gray-600">Uciskaj w górę</div>
-              <div className="text-gray-600">5 uderzeń między łopatki</div>
-            </div>
-          </div>
-        </div>
-      ),
-      overheating: (
-        <div className="bg-gray-100 rounded-xl p-4 mb-4">
-          <div className="text-center mb-4">
-            <div className="text-lg font-bold text-red-600">STOPNE CZASOWE</div>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2 bg-white p-2 rounded">
-              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                <XCircle className="w-4 h-4 text-red-600" />
-              </div>
-              <span className="text-gray-700">Nie używaj lodu</span>
-            </div>
-            <div className="flex items-center gap-2 bg-white p-2 rounded">
-              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-              </div>
-              <span className="text-gray-700">Letnia woda</span>
-            </div>
-            <div className="flex items-center gap-2 bg-white p-2 rounded">
-              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-              </div>
-              <span className="text-gray-700">Wentylator</span>
-            </div>
-          </div>
-        </div>
-      )
-    };
-
-    return guides[guide] || null;
-  };
+  const criticalProcedures = PROCEDURES.filter((p) => p.urgency === 'critical');
+  const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  const kitTotal = KIT_ITEMS.reduce((n, g) => n + g.items.length, 0);
+  const kitPct = Math.round((kitDone.length / kitTotal) * 100);
 
   return (
-    <div className="space-y-4">
-      {/* Tabs */}
-      <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
-        {[
-          { id: 'procedures', label: 'Procedury', icon: BookOpen },
-          { id: 'clinics', label: 'Lecznice', icon: MapPin },
-          { id: 'contacts', label: 'Kontakty', icon: Phone }
-        ].map((tab) => (
+    <div className="space-y-5">
+      {/* ====== Taby ====== */}
+      <div className="flex gap-1 p-1 rounded-2xl bg-gray-100/80 animate-slide-up">
+        {([
+          { key: 'sos', label: 'SOS', Icon: Siren },
+          { key: 'procedures', label: 'Procedury', Icon: BookOpen },
+          { key: 'clinics', label: 'Lecznice', Icon: MapPin },
+          { key: 'kit', label: 'Apteczka', Icon: Shield },
+        ] as { key: Tab; label: string; Icon: any }[]).map(({ key, label, Icon }) => (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all ${
-              activeTab === tab.id
-                ? 'bg-white text-brand-dark shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              tab === key ? 'bg-white shadow-sm ' + (key === 'sos' ? 'text-red-600' : 'text-brand-dark') : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <tab.icon className="w-4 h-4" />
-            <span className="hidden sm:inline">{tab.label}</span>
+            <Icon className="w-4 h-4" />
+            <span>{label}</span>
           </button>
         ))}
       </div>
 
-      {activeTab === 'procedures' && (
-        <>
-          {/* Search and Filter */}
-          <div className="rounded-2xl bg-white border border-gray-200 p-3 sm:p-4">
-            <div className="flex gap-3 mb-3">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Szukaj procedury..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-brand-dark/50"
-                />
-              </div>
+      {/* ====== TAB: SOS ====== */}
+      {tab === 'sos' && (
+        <div className="space-y-5 animate-fade-in">
+          {/* Kompaktowy pasek SOS — bez podwójnego banera pod PageHeader */}
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-red-600 text-white shadow-lg shadow-red-600/20">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+              <Siren className="w-5 h-5" />
             </div>
-
-            {/* Category Filter */}
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-              {categories.map((cat) => {
-                const Icon = cat.icon;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                      selectedCategory === cat.id
-                        ? 'bg-brand-dark text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{cat.name}</span>
-                  </button>
-                );
-              })}
+            <div className="min-w-0">
+              <p className="text-sm font-bold leading-tight">Nagły wypadek? Wybierz sytuację i postępuj krok po kroku</p>
+              <p className="text-[11px] opacity-85 mt-0.5">Tryb prowadzenia ze stoperem, metronomem RKO i przyciskami alarmowymi</p>
             </div>
           </div>
 
-          {/* Procedures Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredProcedures.map((procedure) => {
-              const Icon = procedure.icon;
-              const isSelected = selectedProcedure?.id === procedure.id;
-              
-              return (
-                <div
-                  key={procedure.id}
-                  className={`rounded-xl border-2 overflow-hidden transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-brand-dark bg-brand-dark/5'
-                      : 'border-gray-200 hover:border-brand-dark/50 bg-white'
-                  }`}
-                  onClick={() => setSelectedProcedure(isSelected ? null : procedure)}
+          {petsError && (
+            <div className="rounded-2xl bg-red-50 border border-red-100 p-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-red-700 font-medium">{petsError}</p>
+              <button onClick={loadPets} className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-bold flex-shrink-0">Ponów</button>
+            </div>
+          )}
+
+          {pets.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">Dla kogo pomoc?</p>
+              <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                {pets.map((pet) => {
+                  const sel = selectedPet === String(pet.id);
+                  return (
+                    <button key={pet.id} onClick={() => setSelectedPet(String(pet.id))} className="flex flex-col items-center flex-shrink-0 active:scale-95 transition-all">
+                      <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl overflow-hidden transition-all ${sel ? 'ring-[3px] ring-red-400 ring-offset-2 bg-red-50' : 'bg-gray-100'}`}>
+                        {pet.photo_url ? <img src={pet.photo_url} alt={pet.name} className="w-full h-full object-cover" /> : SPECIES_EMOJI[pet.species] || '🐾'}
+                      </div>
+                      <span className={`mt-1.5 text-[11px] font-semibold max-w-[64px] truncate ${sel ? 'text-red-600' : 'text-gray-500'}`}>{pet.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {currentPet && !isNaN(petWeight) && (
+                <p className="text-xs text-gray-500 mt-1 px-1">
+                  {currentPet.name} · {petWeight} kg → wskazówki dla <b>{isSmallPet ? 'małego zwierzęcia' : 'większego zwierzęcia'}</b>
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">Sytuacje krytyczne</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {criticalProcedures.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openProcedure(p)}
+                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border-2 border-red-100 hover:border-red-300 active:scale-[0.98] transition-all text-left"
                 >
-                  <div className="p-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className={`w-10 h-10 rounded-xl ${getUrgencyColor(procedure.urgency)} flex items-center justify-center`}>
-                        <Icon className="w-5 h-5 text-white" />
-                      </div>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                        procedure.urgency === 'critical' ? 'bg-red-100 text-red-700' :
-                        procedure.urgency === 'urgent' ? 'bg-amber-100 text-amber-700' :
-                        'bg-brand-light text-brand-dark'
-                      }`}>
-                        {getUrgencyLabel(procedure.urgency)}
-                      </span>
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-1 text-sm">{procedure.title}</h4>
-                    <p className="text-xs text-gray-500">{procedure.duration}</p>
-                  </div>
-
-                  {isSelected && (
-                    <div className="border-t border-gray-200 p-3 bg-gray-50">
-                      {procedure.visualGuide && renderVisualGuide(procedure.visualGuide)}
-                      
-                      <div className="mb-3">
-                        <div className="text-xs font-semibold text-gray-700 mb-2">Objawy:</div>
-                        <div className="flex flex-wrap gap-1">
-                          {procedure.symptoms.map((symptom, index) => (
-                            <span key={index} className="px-2 py-0.5 bg-red-50 text-red-700 text-xs rounded-full">
-                              {symptom}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mb-3">
-                        <div className="text-xs font-semibold text-gray-700 mb-2">Kroki postępowania:</div>
-                        <ol className="text-xs text-gray-600 space-y-1">
-                          {procedure.steps.map((step, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-brand-dark text-white text-xs flex items-center justify-center">
-                                {index + 1}
-                              </span>
-                              {step}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-
-                      <div className="mb-3">
-                        <div className="text-xs font-semibold text-red-700 mb-2">Czego NIE robić:</div>
-                        <ul className="text-xs text-red-600 space-y-1">
-                          {procedure.donts.map((dont, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <XCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                              {dont}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCall(veterinaryContacts[0].phone);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-dark text-white text-xs font-medium hover:bg-brand-dark transition-all"
-                        >
-                          <Phone className="w-3 h-3" />
-                          Zadzwoń
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedProcedure(null);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 transition-all"
-                        >
-                          <CheckCircle2 className="w-3 h-3" />
-                          Zamknij
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {activeTab === 'clinics' && (
-        <div className="space-y-3">
-          <div className="rounded-2xl bg-white border border-gray-200 p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-brand-dark" />
-                <h3 className="text-base font-semibold text-gray-900">Najbliższe lecznice 24/7</h3>
-              </div>
+                  <span className="w-11 h-11 rounded-xl bg-red-500 flex items-center justify-center flex-shrink-0">
+                    <p.icon className="w-5 h-5 text-white" />
+                  </span>
+                  <span className="text-sm font-bold text-gray-900 leading-tight">{p.title}</span>
+                </button>
+              ))}
             </div>
+          </div>
 
-            <button
-              onClick={handleLocate}
-              disabled={locating}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white font-medium text-xs sm:text-sm hover:bg-[#173a4a] transition-all disabled:opacity-50"
-            >
-              {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
-              {userLocation ? 'Zaktualizuj lokalizację' : 'Znajdź blisko mnie'}
+          <div className="grid grid-cols-2 gap-2.5">
+            <a href="tel:112" className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-600 text-white font-bold text-sm active:scale-[0.98] transition-all">
+              <Phone className="w-4 h-4" /> Zadzwoń 112
+            </a>
+            <button onClick={() => setTab('clinics')} className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-gray-900 text-white font-bold text-sm active:scale-[0.98] transition-all">
+              <MapPin className="w-4 h-4" /> Najbliższa lecznica
             </button>
           </div>
 
-          {locationState === 'denied' && !userLocation && (
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                <Settings className="w-4 h-4 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs sm:text-sm font-semibold text-amber-800">Brak dostępu do lokalizacji</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Aby wyszukać po okolicy, włącz lokalizację w ustawieniach przeglądarki, a następnie kliknij "Spróbuj ponownie".
-                </p>
-              </div>
+          <div className="rounded-2xl bg-amber-50 border-2 border-amber-200 p-4 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Przewodnik ma charakter informacyjny i nie zastępuje pomocy weterynaryjnej. W zagrożeniu życia zawsze jedź do najbliższej lecznicy — szybkość jest kluczowa.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ====== TAB: PROCEDURY ====== */}
+      {tab === 'procedures' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Szukaj: czekolada, krwawienie, drgawki…"
+              className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm shadow-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            {CATEGORIES.map((cat) => (
               <button
-                onClick={handleLocate}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-all flex-shrink-0"
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedCategory === cat.id ? 'bg-brand-dark text-white' : 'bg-white text-gray-600 border border-gray-200'
+                }`}
               >
-                <Crosshair className="w-3 h-3" /> Spróbuj ponownie
+                <cat.icon className="w-3.5 h-3.5" /> {cat.name}
               </button>
-            </div>
-          )}
+            ))}
+          </div>
 
-          {locationState === 'unsupported' && (
-            <div className="rounded-2xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
-              Twoja przeglądarka nie obsługuje geolokalizacji.
-            </div>
-          )}
-
-          {userLocation && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl bg-brand-dark/10 px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-brand-dark">
-              <div className="flex items-center gap-2">
-                <Navigation className="w-4 h-4" />
-                <span className="font-medium">Lokalizacja włączona: znaleziono {nearbyClinics.length} lecznic w okolicy</span>
-              </div>
-              <button onClick={clearLocation} className="text-xs text-brand-dark underline hover:text-brand-dark sm:ml-auto">
-                Wyłącz lokalizację
-              </button>
-            </div>
-          )}
-
-          <div className="rounded-2xl bg-white border border-gray-200 p-3 sm:p-4">
-            {nearbyClinics.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <MapPin className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Szukanie lecznic w pobliżu...</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {nearbyClinics.map((clinic) => (
-                  <div
-                    key={clinic.id}
-                    className="p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-gray-900 text-sm truncate">{clinic.name}</h4>
-                          {clinic.is24h && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full flex-shrink-0">
-                              24/7
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-600 mb-1 truncate">{clinic.address}</div>
-                        <div className="text-xs text-gray-500 mb-2">{clinic.phone}</div>
-                        <div className="flex flex-wrap gap-1">
-                          {clinic.services.slice(0, 3).map((service, index) => (
-                            <span key={index} className="px-2 py-0.5 bg-brand-dark/10 text-brand-dark text-xs rounded-full">
-                              {service}
-                            </span>
-                          ))}
-                          {clinic.services.length > 3 && (
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                              +{clinic.services.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right ml-2 flex-shrink-0">
-                        <div className="font-semibold text-brand-dark text-sm">{clinic.distance} km</div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={() => handleCall(clinic.phone)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-dark text-white text-xs font-medium hover:bg-brand-dark transition-all"
-                      >
-                        <Phone className="w-3 h-3" />
-                        Zadzwoń
-                      </button>
-                      <button
-                        onClick={() => handleNavigate(clinic)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 transition-all"
-                      >
-                        <Navigation className="w-3 h-3" />
-                        Nawiguj
-                      </button>
-                    </div>
+          <div className="pv-card overflow-hidden divide-y divide-gray-100">
+            {filteredProcedures.map((p) => {
+              const urg = URGENCY_CFG[p.urgency];
+              return (
+                <button key={p.id} onClick={() => openProcedure(p)} className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-gray-50/60 active:bg-gray-50 transition-all">
+                  <span className={`w-11 h-11 rounded-xl ${urg.iconBg} flex items-center justify-center flex-shrink-0`}>
+                    <p.icon className="w-5 h-5 text-white" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">{p.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{p.duration} · {p.steps.length} kroków</p>
                   </div>
-                ))}
-              </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${urg.badge}`}>{urg.label}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </div>
+                </button>
+              );
+            })}
+            {filteredProcedures.length === 0 && (
+              <div className="p-8 text-center text-sm text-gray-400">Brak procedur pasujących do wyszukiwania</div>
             )}
           </div>
         </div>
       )}
+      {/* ====== TAB: LECZNICE ====== */}
+      {tab === 'clinics' && (
+        <div className="space-y-4 animate-fade-in">
+          <button
+            onClick={handleLocate}
+            disabled={locating}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-brand-dark text-white font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
+            {userLocation ? 'Zaktualizuj lokalizację' : 'Znajdź lecznice w pobliżu'}
+          </button>
 
-      {activeTab === 'contacts' && (
-        <div className="rounded-2xl bg-white border border-gray-200 p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Phone className="w-4 h-4 text-brand-dark" />
-            <h3 className="text-base font-semibold text-gray-900">Kontakty weterynaryjne</h3>
-          </div>
+          {locationState === 'denied' && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 flex items-start gap-3">
+              <Settings className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-amber-800">Brak dostępu do lokalizacji</p>
+                <p className="text-xs text-amber-700 mt-0.5">Włącz lokalizację w ustawieniach przeglądarki i spróbuj ponownie.</p>
+              </div>
+              <button onClick={handleLocate} className="px-3 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold flex-shrink-0">Ponów</button>
+            </div>
+          )}
+          {locationState === 'unsupported' && (
+            <div className="rounded-2xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">Przeglądarka nie obsługuje geolokalizacji.</div>
+          )}
+          {locationState === 'unavailable' && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-amber-800 font-medium">Nie udało się ustalić pozycji (brak sygnału GPS lub timeout). Spróbuj ponownie na zewnątrz.</p>
+              <button onClick={handleLocate} className="px-3 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold flex-shrink-0">Ponów</button>
+            </div>
+          )}
+          {userLocation && (
+            <div className="flex items-center gap-2 rounded-2xl bg-brand-mint px-4 py-2.5 text-xs text-brand-dark">
+              <Navigation className="w-4 h-4" />
+              <span className="font-semibold">Lokalizacja aktywna — {nearbyClinics.length} lecznice w okolicy</span>
+            </div>
+          )}
 
-          <div className="space-y-3">
-            {veterinaryContacts.map((contact, index) => (
-              <div
-                key={index}
-                className="p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all"
-              >
-                <div className="flex items-start justify-between mb-2">
+          {/* Numery alarmowe */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">Kontakty alarmowe</p>
+            <div className="pv-card overflow-hidden divide-y divide-gray-100">
+              {VET_CONTACTS.map((c, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3.5">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-gray-900 text-sm truncate">{contact.name}</h4>
-                      {contact.is24h && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full flex-shrink-0">
-                          24/7
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900 text-sm truncate">{c.name}</p>
+                      {c.is24h && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full flex-shrink-0">24/7</span>}
                     </div>
-                    <div className="text-xs text-gray-600 mb-1 truncate">{contact.address}</div>
-                    <div className="text-xs text-gray-500">{contact.phone}</div>
+                    <p className="text-[11px] text-gray-400">{c.note}</p>
+                  </div>
+                  <a href={`tel:${c.phone}`} className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-all" aria-label={`Zadzwoń: ${c.name}`}>
+                    <Phone className="w-4 h-4 text-white" />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Lecznice — prawdziwe dane z OpenStreetMap */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">Lecznice w pobliżu</p>
+            {(locating || clinicsLoading) && (
+              <div className="pv-card p-10 text-center">
+                <Loader2 className="w-6 h-6 text-brand-dark animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-500">{locating ? 'Pobieranie lokalizacji…' : 'Szukam lecznic w okolicy…'}</p>
+              </div>
+            )}
+            {!locating && !clinicsLoading && clinicsError && (
+              <div className="pv-card p-8 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">{clinicsError}</p>
+              </div>
+            )}
+            {!locating && !clinicsLoading && !clinicsError && nearbyClinics.length === 0 && (
+              <div className="pv-card p-10 text-center">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-brand-mint flex items-center justify-center">
+                  <MapPin className="w-6 h-6 text-brand-dark" />
+                </div>
+                <p className="text-sm font-semibold text-gray-700">Włącz lokalizację</p>
+                <p className="text-xs text-gray-400 mt-1">Pokażemy prawdziwe lecznice weterynaryjne w promieniu 15 km — na podstawie OpenStreetMap.</p>
+              </div>
+            )}
+            <div className="space-y-2.5">
+              {nearbyClinics.map((clinic) => {
+                const openNow = isOpenNow(clinic.hours);
+                return (
+                <div key={clinic.id} className={`pv-card p-4 ${clinic.is24h ? 'ring-1 ring-emerald-200' : ''}`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <h4 className="font-semibold text-gray-900 text-sm truncate">{clinic.name}</h4>
+                        {clinic.is24h ? (
+                          <span className="text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full flex-shrink-0 uppercase tracking-wide">Całodobowa</span>
+                        ) : openNow === true ? (
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex-shrink-0">Otwarte teraz</span>
+                        ) : openNow === false ? (
+                          <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full flex-shrink-0">Zamknięte</span>
+                        ) : null}
+                        {clinic.emergency && !clinic.is24h && (
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex-shrink-0">Nagłe przypadki</span>
+                        )}
+                      </div>
+                      {clinic.address ? (
+                        <p className="text-xs text-gray-500 truncate">{clinic.address}</p>
+                      ) : (
+                        <p className="text-xs text-gray-400">Adres w mapach po nawigacji</p>
+                      )}
+                      <p className={`text-[11px] mt-1.5 flex items-start gap-1.5 ${openNow === false ? 'text-red-500' : 'text-gray-500'}`}>
+                        <Clock className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                        {clinic.hours ? fmtHoursPl(clinic.hours) : 'Brak godzin — zadzwoń przed wyjazdem'}
+                      </p>
+                    </div>
+                    <p className="font-bold text-brand-dark text-sm flex-shrink-0">{clinic.distance} km</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {clinic.phone ? (
+                      <a href={`tel:${clinic.phone.replace(/\s/g, '')}`} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-500 text-white text-xs font-bold active:scale-[0.98] transition-all">
+                        <Phone className="w-3.5 h-3.5" /> Zadzwoń
+                      </a>
+                    ) : null}
+                    <button
+                      onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${clinic.coordinates.lat},${clinic.coordinates.lng}`, '_blank')}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold active:scale-[0.98] transition-all"
+                    >
+                      <Navigation className="w-3.5 h-3.5" /> Nawiguj
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleCall(contact.phone)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-dark text-white text-xs font-medium hover:bg-brand-dark transition-all"
-                >
-                  <Phone className="w-3 h-3" />
-                  Zadzwoń
-                </button>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Important Notice */}
-      <div className="rounded-2xl bg-amber-50 border-2 border-amber-200 p-3 sm:p-4">
-        <div className="flex items-start gap-2">
-          <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="font-semibold text-amber-900 mb-1 text-sm">Ważna informacja</h4>
-            <p className="text-xs text-amber-800">
-              Ten przewodnik ma charakter informacyjny i nie zastępuje profesjonalnej pomocy weterynaryjnej. 
-              W sytuacjach zagrożenia życia zawsze skontaktuj się z najbliższą lecznicą weterynaryjną. 
-              Szybkość działania jest kluczowa dla ratowania życia zwierzęcia.
-            </p>
+      {/* ====== TAB: APTECZKA ====== */}
+      {tab === 'kit' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="pv-card p-5">
+            <div className="flex items-center gap-4">
+              <div className="relative w-16 h-16 flex-shrink-0">
+                <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="#e5e7eb" strokeWidth="7" />
+                  <circle cx="32" cy="32" r="28" fill="none" stroke={kitPct === 100 ? '#10B981' : '#2E8B62'} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(kitPct / 100) * 176} 176`} className="transition-all duration-500" />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-800">{kitPct}%</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="pv-section-title">Apteczka pierwszej pomocy</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{kitDone.length}/{kitTotal} rzeczy gotowych — odhaczaj, co masz w domu</p>
+              </div>
+            </div>
+            {kitPct === 100 && (
+              <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                <CheckCircle2 className="w-4 h-4" /> Apteczka kompletna — jesteś przygotowany!
+              </div>
+            )}
+          </div>
+
+          {KIT_ITEMS.map((group) => (
+            <div key={group.group}>
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">{group.group}</p>
+              <div className="pv-card overflow-hidden divide-y divide-gray-100">
+                {group.items.map((item) => {
+                  const done = kitDone.includes(item.id);
+                  return (
+                    <button key={item.id} onClick={() => toggleKit(item.id)} className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50/60 active:bg-gray-50 transition-all">
+                      <span className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${done ? 'bg-brand border-brand' : 'border-gray-300 bg-white'}`}>
+                        {done && <CheckCircle2 className="w-4 h-4 text-white" />}
+                      </span>
+                      <span className={`text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800 font-medium'}`}>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {kitError && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3.5 text-xs text-amber-800 font-medium flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {kitError}
+            </div>
+          )}
+
+          {kitDone.length > 0 && (
+            <button
+              onClick={() => { setKitDone([]); setKitError(''); userPreferencesApi.set('first_aid_kit', []).catch(() => setKitError('Nie udało się wyczyścić checklisty na serwerze.')); }}
+              className="w-full py-3 rounded-2xl bg-gray-100 text-gray-500 text-xs font-bold"
+            >
+              <RotateCcw className="w-3.5 h-3.5 inline mr-1.5" />Wyczyść checklistę
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ====== TRYB KROKÓW (pełny ekran) ====== */}
+      {activeProcedure && (
+        <div className="fixed inset-0 z-[70] bg-white flex flex-col" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <button onClick={closeProcedure} className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0" aria-label="Zamknij">
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-sm truncate">{activeProcedure.title}</p>
+              <p className="text-[11px] text-gray-400">{currentPet ? `dla ${currentPet.name}` : activeProcedure.duration}</p>
+            </div>
+            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${URGENCY_CFG[activeProcedure.urgency].badge}`}>
+              {URGENCY_CFG[activeProcedure.urgency].label}
+            </span>
+          </div>
+
+          {/* Postęp */}
+          <div className="px-4 py-3 flex-shrink-0">
+            <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 mb-1.5">
+              <span>Krok {Math.min(stepIdx + 1, activeProcedure.steps.length)} z {activeProcedure.steps.length}</span>
+              <span>{doneSteps.length}/{activeProcedure.steps.length} wykonanych</span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-brand rounded-full transition-all duration-300" style={{ width: `${(doneSteps.length / activeProcedure.steps.length) * 100}%` }} />
+            </div>
+          </div>
+
+          {/* Objawy */}
+          <div className="px-4 pb-3 flex-shrink-0">
+            <div className="flex flex-wrap gap-1.5">
+              {activeProcedure.symptoms.map((s, i) => (
+                <span key={i} className="text-[11px] bg-red-50 text-red-700 px-2.5 py-1 rounded-full font-medium">{s}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Kroki — scrollable */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            {activeProcedure.sizeHint && currentPet && !isNaN(petWeight) && (
+              <div className="mb-3 p-3 rounded-2xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-700 flex items-start gap-2">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span><b>{currentPet.name}</b> waży {petWeight} kg → stosuj wariant dla <b>{isSmallPet ? 'małego zwierzęcia' : 'większego zwierzęcia'}</b>.</span>
+              </div>
+            )}
+
+            {/* Metronom RKO */}
+            {activeProcedure.metronome && (
+              <div className="mb-4 p-4 rounded-2xl bg-red-50 border-2 border-red-200 text-center">
+                <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-3">Metronom uciśnięć — 110 BPM</p>
+                <div className="flex items-center justify-center gap-4">
+                  <div className={`w-16 h-16 rounded-full bg-red-500 flex items-center justify-center transition-transform duration-100 ${metroOn && metroTick ? 'scale-110' : 'scale-90'}`}>
+                    <span className="text-white font-bold text-xs">{metroOn ? 'UCIŚNIJ' : '110'}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {!metroOn ? (
+                      <button onClick={startMetronome} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 text-white text-xs font-bold">
+                        <Play className="w-3.5 h-3.5" /> Start rytmu
+                      </button>
+                    ) : (
+                      <button onClick={() => setMetroOn(false)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gray-800 text-white text-xs font-bold">
+                        <Pause className="w-3.5 h-3.5" /> Stop
+                      </button>
+                    )}
+                    <button onClick={() => setMetroSound(!metroSound)} className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 text-[11px] font-bold">
+                      {metroSound ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />} {metroSound ? 'Dźwięk wł.' : 'Dźwięk wył.'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Stoper */}
+            {activeProcedure.timer && (
+              <div className="mb-4 p-4 rounded-2xl bg-gray-900 text-white flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Stoper</p>
+                  <p className="text-3xl font-bold tabular-nums">{fmtTime(timerSec)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setTimerOn(!timerOn)} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center" aria-label={timerOn ? 'Pauza' : 'Start'}>
+                    {timerOn ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                  </button>
+                  <button onClick={() => { setTimerOn(false); setTimerSec(0); }} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center" aria-label="Reset">
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Lista kroków — odhaczalna */}
+            <div className="space-y-2">
+              {activeProcedure.steps.map((step, i) => {
+                const done = doneSteps.includes(i);
+                const current = i === stepIdx;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => toggleStep(i)}
+                    className={`w-full flex items-start gap-3 p-3.5 rounded-2xl border-2 text-left transition-all ${
+                      done ? 'bg-emerald-50 border-emerald-200' : current ? 'bg-brand-mint/40 border-brand/40' : 'bg-white border-gray-100'
+                    }`}
+                  >
+                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+                      done ? 'bg-emerald-500 text-white' : current ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {done ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                    </span>
+                    <span className={`text-sm leading-relaxed ${done ? 'text-emerald-700 line-through' : 'text-gray-800 font-medium'}`}>{step}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Czego nie robić */}
+            <button onClick={() => setShowDonts(!showDonts)} className="w-full mt-3 flex items-center justify-between p-3.5 rounded-2xl bg-red-50 border border-red-100">
+              <span className="text-xs font-bold text-red-700 flex items-center gap-2"><XCircle className="w-4 h-4" /> Czego NIE robić</span>
+              <ChevronRight className={`w-4 h-4 text-red-400 transition-transform ${showDonts ? 'rotate-90' : ''}`} />
+            </button>
+            {showDonts && (
+              <div className="mt-2 p-4 rounded-2xl bg-red-50/60 border border-red-100 animate-fade-in">
+                <ul className="space-y-2">
+                  {activeProcedure.donts.map((d, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-red-700">
+                      <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{d}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Stopka akcji */}
+          <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex gap-2 flex-shrink-0 bg-white">
+            <a href="tel:112" className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-red-600 text-white font-bold text-sm">
+              <Phone className="w-4 h-4" /> 112
+            </a>
+            <button onClick={() => { closeProcedure(); setTab('clinics'); }} className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gray-900 text-white font-bold text-sm">
+              <MapPin className="w-4 h-4" /> Lecznica
+            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

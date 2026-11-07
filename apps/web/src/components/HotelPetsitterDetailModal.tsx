@@ -13,7 +13,8 @@ interface HotelPetsitterLocation {
   userRatingsTotal?: number;
   phone?: string;
   website?: string;
-  hours?: string;
+  hours?: string[] | null;
+  todayHours?: string | null;
   isOpenNow?: boolean | null;
   photos?: string[];
   lat: number;
@@ -21,6 +22,7 @@ interface HotelPetsitterLocation {
   businessStatus?: string;
   description?: string;
   priceRange?: string;
+  is24h?: boolean;
 }
 
 interface HotelPetsitterDetailModalProps {
@@ -28,30 +30,44 @@ interface HotelPetsitterDetailModalProps {
   onClose: () => void;
 }
 
+// Dozwolone tylko http(s) — dane z OSM/zgłoszeń nie mogą podawać javascript: itp.
+const safeWebsiteUrl = (url?: string | null) => {
+  if (!url) return null;
+  const u = url.trim();
+  const withProto = /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  try {
+    const parsed = new URL(withProto);
+    return ['http:', 'https:'].includes(parsed.protocol) ? withProto : null;
+  } catch {
+    return null;
+  }
+};
+
 export default function HotelPetsitterDetailModal({ location, onClose }: HotelPetsitterDetailModalProps) {
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
       document.body.classList.remove('modal-open');
     };
-  }, []);
+  }, [onClose]);
 
   const openNavigation = () => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`;
     window.open(url, '_blank');
   };
 
-  const getPhotoUrl = (photoReference: string) => {
-    return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photoReference}&key=${process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY}`;
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-fade-in p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <h3 className="font-semibold text-gray-900">Szczegóły</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
@@ -63,16 +79,16 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
           {location.photos && location.photos.length > 0 && (
             <div className="relative h-48 rounded-2xl overflow-hidden bg-gray-100">
               <img
-                src={getPhotoUrl(location.photos[0])}
+                src={location.photos[0]}
                 alt={location.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement?.remove();
                 }}
               />
-              {location.photos.length > 1 && (
-                <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
-                  +{location.photos.length - 1} zdjęć
+              {location.is24h && (
+                <div className="absolute top-3 right-3 bg-brand-dark text-white text-xs font-bold px-3 py-1.5 rounded-full">
+                  24/7
                 </div>
               )}
             </div>
@@ -83,7 +99,7 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
               {location.type === 'hotel' ? <Building2 className="w-8 h-8" /> : <User className="w-8 h-8" />}
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-lg font-semibold text-gray-900">{location.name}</h4>
+              <h4 className="pv-section-title">{location.name}</h4>
               <p className="text-sm text-gray-500">{location.type === 'hotel' ? 'Hotel dla zwierząt' : 'Petsitter'}</p>
             </div>
           </div>
@@ -95,11 +111,16 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
                 {location.userRatingsTotal && <span className="text-amber-500">({location.userRatingsTotal})</span>}
               </span>
             )}
-            {location.isOpenNow !== null && (
+            {location.isOpenNow !== null && location.isOpenNow !== undefined && (
               <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
                 location.isOpenNow ? 'bg-brand-mint text-brand-dark' : 'bg-gray-100 text-gray-600'
               }`}>
-                <Clock className="w-3 h-3" /> {location.isOpenNow ? 'Otwarte' : 'Zamknięte'}
+                <Clock className="w-3 h-3" /> {location.is24h ? 'Całodobowo' : location.isOpenNow ? 'Otwarte teraz' : 'Zamknięte'}
+              </span>
+            )}
+            {location.is24h && !(location.photos && location.photos.length > 0) && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-brand-dark text-white">
+                24/7
               </span>
             )}
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-dark bg-brand-dark/10 px-2 py-1 rounded-full">
@@ -115,12 +136,21 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
             </div>
           </div>
 
-          {location.hours && (
+          {location.hours && location.hours.length > 0 && (
             <div>
-              <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Godziny otwarcia</h5>
+              <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                Godziny otwarcia
+                {location.todayHours && (
+                  <span className="ml-2 normal-case text-brand-dark font-semibold">({location.todayHours})</span>
+                )}
+              </h5>
               <div className="flex items-start gap-2 text-sm text-gray-700">
                 <Clock className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p>{location.hours}</p>
+                <ul className="space-y-0.5">
+                  {location.hours.map((h, i) => (
+                    <li key={i}>{h}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           )}
@@ -156,8 +186,8 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
                   <Phone className="w-4 h-4" /> Zadzwoń
                 </a>
               )}
-              {location.website && (
-                <a href={location.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 text-gray-700 hover:bg-brand-dark/10 hover:text-brand-dark transition-all text-sm font-medium">
+              {safeWebsiteUrl(location.website) && (
+                <a href={safeWebsiteUrl(location.website)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 text-gray-700 hover:bg-brand-dark/10 hover:text-brand-dark transition-all text-sm font-medium">
                   <Globe className="w-4 h-4" /> Strona
                 </a>
               )}
@@ -166,7 +196,7 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
 
           <button
             onClick={openNavigation}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl pv-btn-primary"
           >
             <Navigation className="w-4 h-4" /> Nawiguj w Google Maps
           </button>

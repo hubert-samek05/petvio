@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { petApi } from '@/lib/api';
+import ConfirmModal from '@/components/ui/ConfirmModal';
+import {
+  SPECIES, speciesLabel, ageLabel, resizeImageToBase64, todayDateInput,
+} from '@/components/PetForm';
 import {
   X,
   Pencil,
@@ -30,6 +34,8 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchPet = useCallback(async () => {
@@ -90,33 +96,14 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Zdjęcie nie może być większe niż 5 MB');
-      return;
+    e.target.value = '';
+    if (file) {
+      resizeImageToBase64(
+        file,
+        (b64) => setForm((f: any) => ({ ...f, photoUrl: b64 })),
+        setError
+      );
     }
-    const src = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const max = 512;
-      const ratio = Math.min(max / img.width, max / img.height, 1);
-      const w = Math.round(img.width * ratio);
-      const h = Math.round(img.height * ratio);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(img, 0, 0, w, h);
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
-      setForm((f: any) => ({ ...f, photoUrl: base64 }));
-      setError('');
-      URL.revokeObjectURL(src);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(src);
-      setError('Nie udało się wczytać zdjęcia');
-    };
-    img.src = src;
   };
 
   const handleSave = async () => {
@@ -127,7 +114,9 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
     setSaving(true);
     setError('');
     try {
-      await petApi.update(petId, form);
+      const payload = { ...form };
+      if (payload.photoUrl === (pet?.photo_url || '')) delete payload.photoUrl;
+      await petApi.update(petId, payload);
       await fetchPet();
       setEditing(false);
       onSaved();
@@ -139,28 +128,21 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
   };
 
   const handleDelete = async () => {
-    if (!confirm('Czy na pewno chcesz usunąć to zwierzę?')) return;
+    setDeleting(true);
     try {
       await petApi.delete(petId);
       onSaved();
       onClose();
-    } catch {}
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Nie udało się usunąć zwierzęcia');
+      setConfirmingDelete(false);
+    } finally {
+      setDeleting(false);
+    }
   };
-
-  const speciesLabel = (s: string) =>
-    s === 'dog' ? 'Pies' : s === 'cat' ? 'Kot' : 'Inne';
 
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-
-  const age = (birthDate: string): string => {
-    if (!birthDate) return '—';
-    const diff = Date.now() - new Date(birthDate).getTime();
-    const years = Math.floor(diff / (365.25 * 24 * 3600 * 1000));
-    const months = Math.floor((diff / (30.44 * 24 * 3600 * 1000)) % 12);
-    if (years === 0) return `${months} mies.`;
-    return `${years} ${years === 1 ? 'rok' : years < 5 ? 'lata' : 'lat'}`;
-  };
 
   if (!isOpen) return null;
 
@@ -211,8 +193,10 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
         {/* Body */}
         <div className="p-6 sm:p-8">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Ładowanie...</div>
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="pv-skeleton h-16 rounded-2xl" />
+              ))}
             </div>
           ) : (
             <>
@@ -251,6 +235,15 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
                       onChange={handleFileChange}
                       className="hidden"
                     />
+                    {(form.photoUrl || pet?.photo_url) && (
+                      <button
+                        type="button"
+                        onClick={() => setForm((f: any) => ({ ...f, photoUrl: '' }))}
+                        className="self-center text-xs font-semibold text-red-400 hover:text-red-500 transition-colors"
+                      >
+                        Usuń zdjęcie
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -269,9 +262,11 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
                         className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
                       >
                         <option value="">Wybierz</option>
-                        <option value="dog">Pies</option>
-                        <option value="cat">Kot</option>
-                        <option value="other">Inne</option>
+                        {SPECIES.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.emoji} {s.label}
+                          </option>
+                        ))}
                       </select>
                     </FormField>
                     <FormField label="Rasa" optional>
@@ -286,6 +281,7 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
                       <input
                         type="date"
                         value={form.birthDate}
+                        max={todayDateInput()}
                         onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
                         className="w-full bg-transparent text-gray-900 font-medium focus:outline-none"
                       />
@@ -340,7 +336,7 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
                   <InfoCard
                     icon={<Cake className="w-5 h-5 text-brand-dark" />}
                     label="Wiek"
-                    value={pet?.birth_date ? age(pet.birth_date) : '—'}
+                    value={(pet?.birth_date && ageLabel(pet.birth_date)) || '—'}
                   />
                   <InfoCard
                     icon={<PawPrint className="w-5 h-5 text-brand-dark" />}
@@ -367,7 +363,7 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
         {/* Footer */}
         <div className="sticky bottom-0 bg-white p-4 sm:p-6 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
           <button
-            onClick={handleDelete}
+            onClick={() => setConfirmingDelete(true)}
             className="order-2 sm:order-1 flex items-center gap-2 text-red-600 hover:bg-red-50 px-4 py-2.5 rounded-xl font-medium transition-all"
           >
             <Trash2 className="w-4 h-4" /> Usuń
@@ -375,7 +371,7 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
           <div className="order-1 sm:order-2 flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 transition-all"
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-brand-mint transition-all"
             >
               Zamknij
             </button>
@@ -383,14 +379,14 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl font-medium bg-brand-dark hover:bg-brand-dark text-white transition-all disabled:opacity-50"
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl font-medium bg-brand-dark hover:bg-brand text-white transition-all disabled:opacity-50"
               >
                 {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
               </button>
             ) : (
               <button
                 onClick={() => setEditing(true)}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium bg-brand-dark hover:bg-brand-dark text-white transition-all"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium bg-brand-dark hover:bg-brand text-white transition-all"
               >
                 <Pencil className="w-4 h-4" /> Edytuj
               </button>
@@ -398,6 +394,19 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
           </div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={confirmingDelete}
+        title={`Usunąć ${pet?.name || 'zwierzę'}?`}
+        description="Ta operacja jest nieodwracalna."
+        details={[
+          'wpisy zdrowia i kalendarz zdrowia',
+          'spacery, diety i karmienia',
+          'aktywne zgłoszenie zaginięcia (jeśli istnieje)',
+        ]}
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>,
     document.body
   );
@@ -405,7 +414,7 @@ export default function PetModal({ petId, isOpen, onClose, onSaved }: PetModalPr
 
 function FormField({ label, optional, full, children }: { label: string; optional?: boolean; full?: boolean; children: React.ReactNode }) {
   return (
-    <div className={`p-4 rounded-2xl bg-gray-50 border border-gray-100 focus-within:border-brand-dark/40 focus-within:bg-white transition-all ${full ? 'sm:col-span-2' : ''}`}>
+    <div className={`p-4 rounded-2xl bg-brand-mint/50 border border-brand-light/60 focus-within:border-brand-dark/40 focus-within:bg-white transition-all ${full ? 'sm:col-span-2' : ''}`}>
       <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
         {label}
         {optional && <span className="normal-case font-normal text-gray-400"> (opcjonalnie)</span>}
@@ -417,7 +426,7 @@ function FormField({ label, optional, full, children }: { label: string; optiona
 
 function InfoCard({ label, value, icon, full }: { label: string; value: string; icon: React.ReactNode; full?: boolean }) {
   return (
-    <div className={`p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-start gap-3 transition-all ${full ? 'sm:col-span-2' : ''}`}>
+    <div className={`p-4 rounded-2xl bg-brand-mint/50 border border-brand-light/60 flex items-start gap-3 transition-all ${full ? 'sm:col-span-2' : ''}`}>
       <div className="p-2.5 rounded-xl bg-white shadow-sm">{icon}</div>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{label}</p>

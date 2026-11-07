@@ -3,24 +3,20 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import ComingSoonModal from '@/components/ComingSoonModal';
+import { unregisterPush } from '@/lib/push';
+import { isMobileContext } from '@/lib/platform';
 import {
   LayoutDashboard,
   PawPrint,
+  ShoppingBag,
   Heart,
   Calendar,
   User,
-  Syringe,
-  Pill,
-  Shield,
-  Stethoscope,
-  PlusCircle,
   LogOut,
   X,
   Menu,
-  Settings,
-  FileText,
-  Bell,
   Scan,
   Flame,
   Utensils,
@@ -29,6 +25,7 @@ import {
   ChefHat,
   Beef,
   HeartHandshake,
+  Stethoscope,
   Building2,
   MapPin,
   Activity,
@@ -40,9 +37,13 @@ import {
   BarChart3,
   Baby,
   MessageSquare,
+  MessagesSquare,
+  Newspaper,
   Users,
   Leaf,
   Sparkles,
+  PlusCircle,
+  Search,
 } from 'lucide-react';
 
 export type MenuItem = {
@@ -50,12 +51,91 @@ export type MenuItem = {
   label: string;
   icon: React.ElementType;
   color?: string;
+  soon?: boolean;
 };
+
+type Group = { label: string; items: MenuItem[] };
+
+const GROUPS: Group[] = [
+  {
+    label: 'Główne',
+    items: [
+      { href: '/dashboard', label: 'Panel główny', icon: LayoutDashboard },
+      { href: '/dashboard/pets', label: 'Moje zwierzęta', icon: PawPrint },
+      { href: '/dashboard/shop', label: 'Sklep', icon: ShoppingBag },
+      { href: '/dashboard/calendar', label: 'Kalendarz', icon: Calendar },
+      { href: '/dashboard/pets/new', label: 'Dodaj zwierzę', icon: PlusCircle },
+    ],
+  },
+  {
+    label: 'Zdrowie',
+    items: [
+      { href: '/dashboard/health', label: 'Książeczka zdrowia', icon: Heart },
+      { href: '/dashboard/blood-analysis', label: 'Analiza krwi', icon: Droplets },
+      { href: '/dashboard/first-aid', label: 'Pierwsza pomoc', icon: AlertTriangle },
+      { href: '/dashboard/herbal-medicine', label: 'Zioła', icon: Leaf },
+    ],
+  },
+  {
+    label: 'Dietetyka',
+    items: [
+      { href: '/dashboard/food-scanner', label: 'Skaner karm', icon: Scan, soon: true },
+      { href: '/dashboard/calorie-calculator', label: 'Kalorie', icon: Flame },
+      { href: '/dashboard/feeding-log', label: 'Karmienie', icon: Utensils },
+      { href: '/dashboard/special-diets', label: 'Diety specjalne', icon: Apple },
+      { href: '/dashboard/sport-diets', label: 'Diety sportowe', icon: Dumbbell },
+      { href: '/dashboard/recipes', label: 'Przepisy', icon: ChefHat },
+      { href: '/dashboard/barf', label: 'BARF', icon: Beef },
+    ],
+  },
+  {
+    label: 'Specjaliści',
+    items: [
+      { href: '/dashboard/specialists', label: 'Behawiorysta', icon: HeartHandshake },
+      { href: '/dashboard/vets', label: 'Weterynarz', icon: Stethoscope },
+      { href: '/dashboard/hotels-petsitters', label: 'Hotel / petsitter', icon: Building2 },
+    ],
+  },
+  {
+    label: 'Aktywność',
+    items: [
+      { href: '/dashboard/walk-tracker', label: 'Spacer', icon: MapPin },
+      { href: '/dashboard/activity', label: 'Aktywność', icon: Activity },
+      { href: '/dashboard/statistics', label: 'Statystyki', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Finanse',
+    items: [
+      { href: '/dashboard/budget', label: 'Budżet', icon: Wallet },
+      { href: '/dashboard/inventory', label: 'Zapasy', icon: Package },
+      { href: '/dashboard/shopping-list', label: 'Zakupy', icon: ShoppingCart },
+    ],
+  },
+  {
+    label: 'Społeczność i inne',
+    items: [
+      { href: '/dashboard/ai-assistant', label: 'AI Asystent', icon: Sparkles },
+      { href: '/dashboard/lost-pets', label: 'Zaginione', icon: AlertTriangle },
+      { href: '/dashboard/adoptions', label: 'Adopcje', icon: Heart },
+      { href: '/dashboard/sharing', label: 'Współdzielenie', icon: Users },
+      { href: '/dashboard/community', label: 'PetvioBook', icon: Newspaper },
+      { href: '/dashboard/messages', label: 'Messenger', icon: MessagesSquare },
+      { href: '/dashboard/groups', label: 'Grupy', icon: Users },
+      { href: '/dashboard/forum', label: 'Forum', icon: MessageSquare },
+      { href: '/dashboard/breeding', label: 'Rozród', icon: Baby },
+      { href: '/dashboard/profile', label: 'Profil', icon: User },
+    ],
+  },
+];
 
 export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [query, setQuery] = useState('');
+  const [soonOpen, setSoonOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -66,281 +146,150 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
     }
   }, []);
 
+  useEffect(() => {
+    if (open) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    return () => document.body.classList.remove('modal-open');
+  }, [open]);
+
   const handleClose = () => {
     setOpen(false);
+    setQuery('');
     onOpen?.(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await unregisterPush();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push(isMobileContext() ? '/welcome' : '/login');
   };
 
-  const mainItems: MenuItem[] = [
-    { href: '/dashboard', label: 'Panel główny', icon: LayoutDashboard, color: '#0F3D2E' },
-    { href: '/dashboard/pets', label: 'Moje zwierzęta', icon: PawPrint, color: '#0F3D2E' },
-  ];
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((i) => i.label.toLowerCase().includes(q)),
+      })).filter((g) => g.items.length > 0)
+    : GROUPS;
 
-  const healthItems: MenuItem[] = [
-    { href: '/dashboard/health', label: 'Książeczka zdrowia', icon: Heart, color: '#0F3D2E' },
-    { href: '/dashboard/calendar', label: 'Kalendarz', icon: Calendar, color: '#0F3D2E' },
-    { href: '/dashboard/blood-analysis', label: 'Analiza badań krwi', icon: Droplets, color: '#0F3D2E' },
-    { href: '/dashboard/first-aid', label: 'Leczenie i pierwsza pomoc', icon: AlertTriangle, color: '#0F3D2E' },
-    { href: '/dashboard/herbal-medicine', label: 'Ziołolecznictwo', icon: Leaf, color: '#0F3D2E' },
-  ];
-
-  const dietItems: MenuItem[] = [
-    { href: '/dashboard/food-scanner', label: 'Skaner karm', icon: Scan, color: '#0F3D2E' },
-    { href: '/dashboard/calorie-calculator', label: 'Kalkulator kalorii', icon: Flame, color: '#0F3D2E' },
-    { href: '/dashboard/feeding-log', label: 'Dziennik karmienia', icon: Utensils, color: '#0F3D2E' },
-    { href: '/dashboard/special-diets', label: 'Diety specjalistyczne', icon: Apple, color: '#0F3D2E' },
-    { href: '/dashboard/sport-diets', label: 'Dietetyka sportowa', icon: Dumbbell, color: '#0F3D2E' },
-    { href: '/dashboard/recipes', label: 'Przepisy', icon: ChefHat, color: '#0F3D2E' },
-    { href: '/dashboard/barf', label: 'Baza BARF', icon: Beef, color: '#0F3D2E' },
-  ];
-
-  const specialistItems: MenuItem[] = [
-    { href: '/dashboard/specialists', label: 'Behawiorysta, trener', icon: HeartHandshake, color: '#0F3D2E' },
-    { href: '/dashboard/vets', label: 'Weterynarz / dietetyk', icon: Stethoscope, color: '#0F3D2E' },
-    { href: '/dashboard/hotels-petsitters', label: 'Hotel / petsitter', icon: Building2, color: '#0F3D2E' },
-  ];
-
-  const activityItems: MenuItem[] = [
-    { href: '/dashboard/walk-tracker', label: 'Spacer', icon: MapPin, color: '#0F3D2E' },
-    { href: '/dashboard/activity', label: 'Aktywność', icon: Activity, color: '#0F3D2E' },
-  ];
-
-  const financeItems: MenuItem[] = [
-    { href: '/dashboard/budget', label: 'Budżet', icon: Wallet, color: '#0F3D2E' },
-    { href: '/dashboard/inventory', label: 'Zapasy', icon: Package, color: '#0F3D2E' },
-    { href: '/dashboard/shopping-list', label: 'Lista zakupów', icon: ShoppingCart, color: '#0F3D2E' },
-  ];
-
-  const otherItems: MenuItem[] = [
-    { href: '/dashboard/ai-assistant', label: 'AI Asystent', icon: Sparkles, color: '#0F3D2E' },
-    { href: '/dashboard/lost-pets', label: 'Zaginione', icon: AlertTriangle, color: '#0F3D2E' },
-    { href: '/dashboard/adoptions', label: 'Adopcje', icon: Heart, color: '#0F3D2E' },
-    { href: '/dashboard/sharing', label: 'Współdzielenie', icon: Users, color: '#0F3D2E' },
-    { href: '/dashboard/forum', label: 'Forum', icon: MessageSquare, color: '#0F3D2E' },
-    { href: '/dashboard/breeding', label: 'Rozród', icon: Baby, color: '#0F3D2E' },
-    { href: '/dashboard/statistics', label: 'Statystyki', icon: BarChart3, color: '#0F3D2E' },
-    { href: '/dashboard/pets/new', label: 'Dodaj zwierzę', icon: PlusCircle, color: '#0F3D2E' },
-    { href: '/dashboard/profile', label: 'Profil', icon: User, color: '#0F3D2E' },
-    { href: '/dashboard/profile', label: 'Ustawienia', icon: Settings, color: '#0F3D2E' },
-  ];
+  let tileIndex = 0;
 
   const modal = open && (
-    <div className="fixed inset-0 z-[100] flex flex-col">
-      <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" onClick={handleClose}></div>
-      <div className="relative mt-auto w-full max-h-[90vh] bg-white rounded-t-3xl shadow-2xl overflow-y-auto animate-in slide-in-from-bottom duration-300">
-        <div className="sticky top-0 bg-white/95 backdrop-blur-sm px-5 pt-5 pb-3 rounded-t-3xl border-b border-gray-100 z-10">
-          <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-[100] flex flex-col justify-end">
+      <div className="absolute inset-0 bg-brand-dark/50 backdrop-blur-sm animate-backdrop-in" onClick={handleClose} />
+
+      <div className="relative w-full max-h-[92dvh] bg-brand-cream rounded-t-[32px] shadow-2xl overflow-y-auto animate-sheet-up">
+        {/* Uchwyt */}
+        <div className="sticky top-0 z-20 bg-brand-cream/95 backdrop-blur-md pt-3 pb-4 px-5 border-b border-gray-200/60 rounded-t-[32px]">
+          <div className="w-10 h-1.5 rounded-full bg-gray-300 mx-auto mb-4" />
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#1B6B4A]">Menu</p>
-              <h2 className="text-xl font-semibold text-gray-900">Wszystkie funkcje</h2>
+              <h2 className="font-serif text-xl font-normal text-gray-900">Wszystkie funkcje</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Przesuń lub wyszukaj</p>
             </div>
             <button
               onClick={handleClose}
-              className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-all"
+              aria-label="Zamknij menu"
+              className="w-10 h-10 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center justify-center active:scale-90 transition-transform"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Wyszukiwarka */}
+          <div className="mt-4 flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-4 py-3">
+            <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Szukaj funkcji..."
+              className="w-full bg-transparent outline-none text-sm text-gray-700 placeholder:text-gray-400"
+            />
+            {query && (
+              <button onClick={() => setQuery('')} className="text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="p-5 space-y-7">
-          {/* Main */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Główne</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {mainItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
+        <div className="p-5 pb-10 space-y-7">
+          {filtered.length === 0 && (
+            <div className="text-center py-10 text-gray-400 text-sm">Brak wyników dla „{query}”</div>
+          )}
 
-          {/* Health */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Zdrowie</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {healthItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
+          {filtered.map((group) => (
+            <section key={group.label}>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-brand mb-3 px-1">
+                {group.label}
+              </p>
+              <div className="grid grid-cols-3 gap-2.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    item.href === '/dashboard'
+                      ? pathname === '/dashboard'
+                      : pathname.startsWith(item.href);
+                  const delay = `stagger-${Math.min(++tileIndex % 12 || 12, 12)}`;
+                  if (item.soon) {
+                    return (
+                      <button
+                        key={item.label + item.href}
+                        type="button"
+                        onClick={() => setSoonOpen(true)}
+                        className={`pv-tile animate-scale-in ${delay} !min-h-[92px] opacity-60`}
+                      >
+                        <span className="absolute top-2 right-2 px-1.5 h-4 rounded-full bg-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wide flex items-center justify-center">
+                          wkrótce
+                        </span>
+                        <div className="pv-tile-icon !w-10 !h-10 bg-gray-100 text-gray-400">
+                          <Icon className="w-[18px] h-[18px]" />
+                        </div>
+                        <span className="pv-tile-label !text-[11px] !text-gray-400">{item.label}</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <Link
+                      key={item.label + item.href}
+                      href={item.href}
+                      onClick={handleClose}
+                      className={`pv-tile animate-scale-in ${delay} !min-h-[92px] ${
+                        active ? '!border-brand !bg-brand-mint' : ''
+                      }`}
                     >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
+                      <div
+                        className={`pv-tile-icon !w-10 !h-10 ${
+                          active ? 'bg-brand text-white' : 'bg-brand-mint text-brand-dark'
+                        }`}
+                      >
+                        <Icon className="w-[18px] h-[18px]" />
+                      </div>
+                      <span className="pv-tile-label !text-[11px]">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
 
-          {/* Diet */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Dietetyka</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {dietItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Specialists */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Specjaliści</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {specialistItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Activity */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Trening i aktywność</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {activityItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Finance */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Finanse</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {financeItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all text-center"
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Other */}
-          <section>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Inne</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {otherItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={handleClose}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-brand-mint hover:border-brand/30 border border-transparent transition-all"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* User + Logout */}
-          <section className="pt-3 border-t border-gray-100">
+          {/* Użytkownik + wylogowanie */}
+          <section className="pt-4 border-t border-gray-200/70">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#0F3D2E] to-[#1B6B4A] flex items-center justify-center text-white font-semibold text-sm">
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-sm"
+                  style={{ background: 'linear-gradient(135deg, #1B6B4A, #0F3D2E)' }}
+                >
                   {user ? `${(user.firstName || 'U')[0]}${(user.lastName || '')[0] || ''}`.toUpperCase() : 'U'}
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">
+                  <p className="font-semibold text-gray-900 text-sm">
                     {user ? `${user.firstName} ${user.lastName}` : 'Użytkownik'}
                   </p>
                   <p className="text-xs text-gray-500">{user?.email || ''}</p>
@@ -348,7 +297,7 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 active:scale-95 transition-all"
               >
                 <LogOut className="w-4 h-4" /> Wyloguj
               </button>
@@ -356,6 +305,7 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
           </section>
         </div>
       </div>
+      {soonOpen && <ComingSoonModal open={soonOpen} onClose={() => setSoonOpen(false)} />}
     </div>
   );
 
@@ -366,12 +316,15 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
           setOpen(true);
           onOpen?.(true);
         }}
-        className={`flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl min-w-[56px] transition-all ${
-          open ? 'text-[#0F3D2E] bg-[#0F3D2E]/10' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+        aria-label="Otwórz menu"
+        className={`flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-2xl min-w-[58px] transition-all duration-300 ${
+          open ? 'text-brand-dark' : 'text-gray-400 hover:text-gray-600'
         }`}
       >
-        <Menu className="w-5 h-5" />
-        <span className="text-[10px] font-medium leading-none">Menu</span>
+        <span className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all ${open ? 'bg-brand-mint' : ''}`}>
+          <Menu className="w-5 h-5" />
+        </span>
+        <span className={`text-[10px] leading-none ${open ? 'font-bold' : 'font-medium'}`}>Menu</span>
       </button>
 
       {typeof window !== 'undefined' && modal && createPortal(modal, document.body)}

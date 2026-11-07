@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import {
   Beef,
   Cat,
   Dog,
   Sparkles,
   ArrowRight,
+  PawPrint,
 } from 'lucide-react';
 
 export interface BarfPresetPayload {
@@ -110,16 +112,42 @@ const readyPlans: ReadyPlan[] = [
 ];
 
 export default function BarfReadyPlans({ onApply }: { onApply: (preset: BarfPresetPayload) => void }) {
+  const [speciesFilter, setSpeciesFilter] = useState<'' | 'dog' | 'cat'>('');
+  const visible = readyPlans.filter((p) => !speciesFilter || p.species === speciesFilter);
+
+  const filters: { value: '' | 'dog' | 'cat'; label: string; Icon: any }[] = [
+    { value: '', label: 'Wszystkie', Icon: PawPrint },
+    { value: 'dog', label: 'Pies', Icon: Dog },
+    { value: 'cat', label: 'Kot', Icon: Cat },
+  ];
+
   return (
     <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        {filters.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setSpeciesFilter(f.value)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-semibold border transition-all ${
+              speciesFilter === f.value
+                ? 'bg-brand-dark text-white border-transparent shadow-md shadow-brand-dark/20'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <f.Icon className="w-3.5 h-3.5" />
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {readyPlans.map((plan) => {
+        {visible.map((plan) => {
           const SpeciesIcon = plan.species === 'dog' ? Dog : Cat;
           return (
-            <div key={plan.id} className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm flex flex-col gap-3">
+            <div key={plan.id} className="p-5 pv-card shadow-sm flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-dark to-brand flex items-center justify-center text-white flex-shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-brand-mint flex items-center justify-center text-brand-dark flex-shrink-0">
                     <SpeciesIcon className="w-5 h-5" />
                   </div>
                   <div>

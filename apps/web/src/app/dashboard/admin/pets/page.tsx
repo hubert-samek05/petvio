@@ -37,7 +37,7 @@ export default function AdminPetsPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
             <PageHeader title="Zarządzanie zwierzętami" description="Przeglądaj wszystkie zwierzęta w systemie" />
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+      <div className="pv-card">
         <div className="p-4 border-b border-gray-200">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />

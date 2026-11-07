@@ -27,6 +27,7 @@ interface Guide {
   sections: GuideSection[];
   ctaHref?: string;
   ctaLabel?: string;
+  ctaCalculator?: boolean; // CTA otwiera Kalkulator BARF w tej samej zakładce
 }
 
 const guides: Guide[] = [
@@ -145,7 +146,7 @@ const guides: Guide[] = [
           'Przy suplementacji witamin rozpuszczalnych w tłuszczach (A, D, E, K) zawsze konsultuj dawki z weterynarzem – ich nadmiar może być szkodliwy.',
       },
     ],
-    ctaHref: '/dashboard/barf',
+    ctaCalculator: true,
     ctaLabel: 'Dodaj suplementy w Kalkulatorze BARF',
   },
   {
@@ -176,7 +177,7 @@ const guides: Guide[] = [
           'W Kalkulatorze BARF wybierz poziom aktywności „Szczenię / kocię (wzrost)”, aby uzyskać wyższy % masy ciała dziennie odpowiedni dla intensywnego wzrostu.',
       },
     ],
-    ctaHref: '/dashboard/barf',
+    ctaCalculator: true,
     ctaLabel: 'Przejdź do Kalkulatora BARF',
   },
   {
@@ -212,7 +213,7 @@ const guides: Guide[] = [
   },
 ];
 
-export default function BarfGuides() {
+export default function BarfGuides({ onGoCalculator }: { onGoCalculator?: () => void }) {
   const [openId, setOpenId] = useState<string | null>(guides[0]?.id || null);
 
   return (
@@ -221,12 +222,12 @@ export default function BarfGuides() {
         const Icon = guide.icon;
         const isOpen = openId === guide.id;
         return (
-          <div key={guide.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div key={guide.id} className="pv-card overflow-hidden">
             <button
               onClick={() => setOpenId(isOpen ? null : guide.id)}
-              className="w-full flex items-center gap-4 p-5 text-left hover:bg-gray-50 transition-all"
+              className="w-full flex items-center gap-4 p-5 text-left hover:bg-brand-mint/60 transition-all"
             >
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-dark to-brand flex items-center justify-center text-white flex-shrink-0">
+              <div className="w-11 h-11 rounded-xl bg-brand-mint flex items-center justify-center text-brand-dark flex-shrink-0">
                 <Icon className="w-5 h-5" />
               </div>
               <div className="flex-1">
@@ -245,14 +246,21 @@ export default function BarfGuides() {
                     <p className="text-sm text-gray-600 leading-relaxed">{section.content}</p>
                   </div>
                 ))}
-                {guide.ctaHref && (
+                {guide.ctaCalculator && onGoCalculator ? (
+                  <button
+                    onClick={onGoCalculator}
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-dark hover:underline pt-1"
+                  >
+                    {guide.ctaLabel} <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : guide.ctaHref ? (
                   <Link
                     href={guide.ctaHref}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-dark hover:underline pt-1"
                   >
                     {guide.ctaLabel} <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
-                )}
+                ) : null}
               </div>
             )}
           </div>

@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { recipeApi } from '@/lib/api';
-import RecipeModal, { Recipe, speciesOptions, categoryOptions } from './RecipeModal';
+import RecipeModal, { Recipe, speciesOptions, categoryOptions, difficultyOptions } from './RecipeModal';
 import RecipeDetailModal from './RecipeDetailModal';
+import ConfirmModal from './ui/ConfirmModal';
+import { checkToxicIngredients } from './toxicIngredients';
 import {
   Plus,
   ChefHat,
@@ -17,6 +19,7 @@ import {
   Search,
   Sparkles,
   TrendingUp,
+  ShieldAlert,
 } from 'lucide-react';
 
 const categoryIcon: Record<string, string> = {
@@ -43,6 +46,8 @@ export default function Recipes() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [detailRecipe, setDetailRecipe] = useState<Recipe | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [deletingRecipe, setDeletingRecipe] = useState<Recipe | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -61,6 +66,7 @@ export default function Recipes() {
         const data = await recipeApi.getMine({
           species: speciesFilter || undefined,
           category: categoryFilter || undefined,
+          search: search || undefined,
         });
         setRecipes(data.recipes || []);
       } else {
@@ -87,15 +93,24 @@ export default function Recipes() {
     fetchRecipes();
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Czy na pewno chcesz usunąć ten przepis?')) return;
+  const handleDelete = (id: number) => {
+    const recipe = recipes.find((r) => r.id === id) || detailRecipe;
+    setDeletingRecipe(recipe && recipe.id === id ? recipe : ({ id } as Recipe));
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingRecipe) return;
+    setDeleting(true);
     try {
-      await recipeApi.delete(id);
+      await recipeApi.delete(deletingRecipe.id);
+      setDeletingRecipe(null);
       setModalOpen(false);
       setDetailOpen(false);
       fetchRecipes();
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Nie udało się usunąć przepisu');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -138,24 +153,22 @@ export default function Recipes() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        {activeTab === 'community' && (
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Szukaj przepisu..."
-              className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
-            />
-          </div>
-        )}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Szukaj przepisu..."
+            className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
+          />
+        </div>
 
         <div className="relative">
           <select
             value={speciesFilter}
             onChange={(e) => setSpeciesFilter(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Wszystkie zwierzęta</option>
             {speciesOptions.map((s) => (
@@ -171,7 +184,7 @@ export default function Recipes() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Wszystkie kategorie</option>
             {categoryOptions.map((c) => (
@@ -206,7 +219,12 @@ export default function Recipes() {
       </div>
 
       {error && (
-        <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">{error}</div>
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium flex items-center gap-2">
+          {error}
+          <button onClick={() => fetchRecipes()} className="ml-auto text-xs font-bold underline flex-shrink-0">
+            Spróbuj ponownie
+          </button>
+        </div>
       )}
 
       {activeTab === 'mine' && (
@@ -215,20 +233,23 @@ export default function Recipes() {
             setEditingRecipe(null);
             setModalOpen(true);
           }}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand-dark text-white font-medium hover:bg-brand-dark transition-all shadow-md shadow-brand-dark/20"
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl pv-btn-primary shadow-md shadow-brand-dark/20"
         >
           <Plus className="w-4 h-4" /> Dodaj nowy przepis
         </button>
       )}
 
       {loading ? (
-        <div className="text-center py-16 text-gray-500">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-          Ładowanie przepisów...
+        <div className="space-y-4 animate-fade-in">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="pv-skeleton h-28 rounded-3xl" />
+          ))}
         </div>
       ) : recipes.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
-          <ChefHat className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+        <div className="pv-card p-14 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-3xl bg-brand-mint flex items-center justify-center animate-float">
+            <ChefHat className="w-7 h-7 text-brand-dark" />
+          </div>
           <p className="text-gray-600 font-medium">
             {activeTab === 'mine' ? 'Nie masz jeszcze żadnych przepisów' : 'Brak publicznych przepisów spełniających kryteria'}
           </p>
@@ -238,24 +259,34 @@ export default function Recipes() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {recipes.map((recipe) => (
+          {recipes.map((recipe) => {
+            const toxic = checkToxicIngredients(recipe.ingredients, recipe.species);
+            const diff = difficultyOptions.find((d) => d.value === recipe.difficulty);
+            return (
             <button
               key={recipe.id}
               onClick={() => openDetail(recipe)}
-              className="text-left p-5 rounded-2xl bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-dark/30 transition-all flex flex-col gap-3"
+              className="text-left p-5 pv-card shadow-sm hover:shadow-md hover:border-brand-dark/30 transition-all flex flex-col gap-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-dark to-brand flex items-center justify-center text-xl flex-shrink-0">
                   {categoryIcon[recipe.category] || '🍽️'}
                 </div>
-                <span
-                  className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full ${
-                    recipe.visibility === 'public' ? 'bg-brand-mint text-brand-dark' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {recipe.visibility === 'public' ? <Globe2 className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                  {recipe.visibility === 'public' ? 'Publiczny' : 'Prywatny'}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full ${
+                      recipe.visibility === 'public' ? 'bg-brand-mint text-brand-dark' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {recipe.visibility === 'public' ? <Globe2 className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                    {recipe.visibility === 'public' ? 'Publiczny' : 'Prywatny'}
+                  </span>
+                  {toxic.length > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">
+                      <ShieldAlert className="w-3 h-3" /> Składniki ryzykowne
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -279,6 +310,17 @@ export default function Recipes() {
                     <Users className="w-3 h-3" /> {recipe.servings}
                   </span>
                 ) : null}
+                {diff && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${
+                    recipe.difficulty === 'hard'
+                      ? 'bg-red-50 text-red-600'
+                      : recipe.difficulty === 'medium'
+                      ? 'bg-amber-50 text-amber-600'
+                      : 'bg-green-50 text-green-600'
+                  }`}>
+                    {diff.label}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-gray-100">
@@ -296,7 +338,8 @@ export default function Recipes() {
                 </span>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -316,6 +359,16 @@ export default function Recipes() {
         onEdit={openEditFromDetail}
         onDelete={handleDelete}
         onLikeChanged={handleLikeChanged}
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingRecipe}
+        onCancel={() => setDeletingRecipe(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Usuń przepis"
+        description={deletingRecipe ? `Czy na pewno chcesz usunąć przepis „${deletingRecipe.title || ''}"?` : ''}
+        confirmLabel="Usuń"
       />
     </div>
   );

@@ -9,6 +9,7 @@ const typeLabels: Record<string, string> = {
   behaviorist: 'Behawiorysta',
   trainer: 'Trener',
   zoopsychologist: 'Zoopsycholog',
+  dietitian: 'Dietetyk',
 };
 
 const statusStyle: Record<string, { bg: string; text: string; label: string; icon: any }> = {
@@ -20,13 +21,16 @@ const statusStyle: Record<string, { bg: string; text: string; label: string; ico
 export default function MySpecialistSubmissions() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
   const load = () => {
     setLoading(true);
+    setLoadError('');
     specialistApi
       .getMine()
       .then((data) => setSubmissions(data.specialists || []))
+      .catch(() => setLoadError('Nie udało się pobrać Twoich zgłoszeń'))
       .finally(() => setLoading(false));
   };
 
@@ -44,12 +48,20 @@ export default function MySpecialistSubmissions() {
       </button>
 
       {loading ? (
-        <div className="text-center py-16 text-gray-500">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-          Ładowanie zgłoszeń...
+        <div className="space-y-4 animate-fade-in">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="pv-skeleton h-28 rounded-3xl" />
+          ))}
+        </div>
+      ) : loadError ? (
+        <div className="pv-card p-8 text-center space-y-3">
+          <p className="text-sm text-gray-700">{loadError}</p>
+          <button onClick={load} className="px-5 py-2 rounded-xl bg-brand-dark text-white text-sm font-medium hover:bg-[#173a4a] transition-all">
+            Spróbuj ponownie
+          </button>
         </div>
       ) : submissions.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
+        <div className="pv-card p-14 text-center">
           <p className="text-gray-500 text-sm">Nie zgłosiłeś jeszcze żadnego specjalisty.</p>
         </div>
       ) : (

@@ -52,7 +52,7 @@ interface FeedingLogItem {
 type FeedingLogModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (warnings?: string[]) => void;
   onDelete?: (id: number) => void;
   petId: number;
   date: string;
@@ -209,11 +209,11 @@ export default function FeedingLogModal({
 
       if (editingLog) {
         await feedingLogApi.update(editingLog.id, data);
+        onSaved();
       } else {
-        await feedingLogApi.create(data);
+        const res = await feedingLogApi.create(data);
+        onSaved(res.dietWarnings);
       }
-
-      onSaved();
       onClose();
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Nie udało się zapisać wpisu');
@@ -401,7 +401,7 @@ export default function FeedingLogModal({
                 />
               </WizardField>
 
-              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
+              <div className="p-5 rounded-2xl bg-brand-mint/50 border border-brand-light/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Podsumowanie</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -458,7 +458,7 @@ export default function FeedingLogModal({
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="px-8 py-3.5 rounded-full border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                  className="px-8 py-3.5 rounded-full pv-btn-ghost flex items-center justify-center gap-2"
                 >
                   <ChevronLeft className="w-4 h-4" /> Wstecz
                 </button>
@@ -468,7 +468,7 @@ export default function FeedingLogModal({
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all flex items-center justify-center gap-2"
               >
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
@@ -477,7 +477,7 @@ export default function FeedingLogModal({
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex-1 bg-brand-dark hover:bg-brand-dark text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-dark hover:bg-brand text-white py-3.5 rounded-full font-medium shadow-md shadow-brand-dark/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {editingLog ? 'Zapisz zmiany' : 'Dodaj'}
@@ -504,7 +504,7 @@ function WizardField({
 }) {
   return (
     <div
-      className={`p-5 rounded-2xl bg-white border border-gray-200 shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
+      className={`p-5 pv-card shadow-sm focus-within:border-brand-dark/50 focus-within:ring-2 focus-within:ring-[#1B6B4A]/10 transition-all ${
         full ? 'sm:col-span-2' : ''
       }`}
     >

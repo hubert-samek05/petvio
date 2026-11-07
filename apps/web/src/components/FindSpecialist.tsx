@@ -21,6 +21,7 @@ import {
   Crosshair,
   Settings,
   MapPinned,
+  Apple,
 } from 'lucide-react';
 import AddSpecialistModal from './AddSpecialistModal';
 import SpecialistDetailModal from './SpecialistDetailModal';
@@ -30,19 +31,33 @@ const typeOptions = [
   { value: 'behaviorist', label: 'Behawiorysta', icon: Brain },
   { value: 'trainer', label: 'Trener', icon: GraduationCap },
   { value: 'zoopsychologist', label: 'Zoopsycholog', icon: Heart },
+  { value: 'dietitian', label: 'Dietetyk', icon: Apple },
 ];
 
 const typeLabels: Record<string, string> = {
   behaviorist: 'Behawiorysta',
   trainer: 'Trener',
   zoopsychologist: 'Zoopsycholog',
+  dietitian: 'Dietetyk',
+  hotel: 'Hotel',
+  petsitter: 'Petsitter',
 };
 
-const typeColors: Record<string, string> = {
-  behaviorist: 'bg-red-50 text-red-700 border-red-200',
-  trainer: 'bg-brand-dark/10 text-brand-dark border-brand-dark/20',
-  zoopsychologist: 'bg-brand-mint text-purple-700 border-purple-200',
+// Dozwolone tylko http(s) — zgłoszenia użytkowników nie mogą podawać javascript: itp.
+const safeWebsiteUrl = (url: string | null) => {
+  if (!url) return null;
+  const u = url.trim();
+  const withProto = /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  try {
+    const parsed = new URL(withProto);
+    return ['http:', 'https:'].includes(parsed.protocol) ? withProto : null;
+  } catch {
+    return null;
+  }
 };
+
+// jednolity, miętowy wygląd badge'a typu
+const typeBadge = 'bg-brand-mint text-brand-dark border-emerald-200';
 
 interface Specialist {
   id: number;
@@ -69,7 +84,8 @@ export default function FindSpecialist() {
   const [city, setCity] = useState('');
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locating, setLocating] = useState(false);
-  const [locationState, setLocationState] = useState<'idle' | 'denied' | 'granted' | 'unsupported'>('idle');
+  const [locationState, setLocationState] = useState<'idle' | 'denied' | 'granted' | 'unsupported' | 'error'>('idle');
+  const [loadError, setLoadError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSpecialist, setSelectedSpecialist] = useState<Specialist | null>(null);
 
@@ -84,8 +100,9 @@ export default function FindSpecialist() {
         lng: userLocation ? userLocation[1] : undefined,
       });
       setSpecialists(data.specialists || []);
+      setLoadError('');
     } catch {
-      // silent
+      setLoadError('Nie udało się pobrać specjalistów');
     } finally {
       setLoading(false);
     }
@@ -113,10 +130,9 @@ export default function FindSpecialist() {
         setLocating(false);
         if (error.code === 1) {
           setLocationState('denied');
-        } else if (error.code === 2) {
-          setLocationState('unsupported');
         } else {
-          setLocationState('denied');
+          // 2 = pozycja niedostępna, 3 = timeout — to nie brak obsługi ani odmowa zgody.
+          setLocationState('error');
         }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -167,7 +183,7 @@ export default function FindSpecialist() {
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder="Szukaj po mieście..."
-            className="w-full bg-white border border-gray-200 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="w-full bg-white border border-gray-200 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           />
         </div>
 
@@ -175,7 +191,7 @@ export default function FindSpecialist() {
           <select
             value={species}
             onChange={(e) => setSpecies(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-2.5 sm:py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand-dark/50"
+            className="appearance-none bg-white border border-gray-200 rounded-2xl pl-4 pr-10 py-2.5 sm:py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-dark/20 focus:border-brand focus:ring-4 focus:ring-brand/10"
           >
             <option value="">Pies i kot</option>
             <option value="dog">Pies</option>
@@ -221,6 +237,29 @@ export default function FindSpecialist() {
         </div>
       )}
 
+      {locationState === 'error' && !userLocation && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-amber-800 flex-1">
+            Nie udało się ustalić Twojej pozycji. Sprawdź sygnał GPS i spróbuj ponownie, albo wpisz miasto ręcznie.
+          </p>
+          <button
+            onClick={handleLocate}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-all flex-shrink-0"
+          >
+            <Crosshair className="w-4 h-4" /> Spróbuj ponownie
+          </button>
+        </div>
+      )}
+
+      {loadError && !loading && (
+        <div className="pv-card p-6 sm:p-8 text-center space-y-3">
+          <p className="text-sm text-gray-700">{loadError}</p>
+          <button onClick={fetchSpecialists} className="px-5 py-2 rounded-xl bg-brand-dark text-white text-sm font-medium hover:bg-[#173a4a] transition-all">
+            Spróbuj ponownie
+          </button>
+        </div>
+      )}
+
       {userLocation && !loading && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl bg-brand-dark/10 px-4 py-3 text-sm text-brand-dark">
           <div className="flex items-center gap-2">
@@ -235,12 +274,13 @@ export default function FindSpecialist() {
 
       <div className="space-y-4">
         {loading ? (
-          <div className="text-center py-16 text-gray-500">
-            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-            Szukanie specjalistów...
+          <div className="space-y-4 animate-fade-in">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="pv-skeleton h-24 rounded-3xl" />
+            ))}
           </div>
-        ) : specialists.length === 0 ? (
-          <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
+        ) : loadError ? null : specialists.length === 0 ? (
+          <div className="pv-card p-14 text-center">
             <p className="text-gray-500 text-sm">Brak specjalistów spełniających kryteria wyszukiwania.</p>
           </div>
         ) : (
@@ -251,10 +291,10 @@ export default function FindSpecialist() {
                 <div
                   key={s.id}
                   onClick={() => setSelectedSpecialist(s)}
-                  className="flex flex-col rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden hover:shadow-md hover:border-brand-dark/30 cursor-pointer transition-all"
+                  className="flex flex-col pv-card shadow-sm overflow-hidden hover:shadow-md hover:border-brand-dark/30 cursor-pointer transition-all"
                 >
-                  <div className="h-28 sm:h-32 bg-gradient-to-br from-[#1B6B4A]/20 to-[#1B6B4A]/5 flex items-center justify-center">
-                    <div className="w-14 h-14 rounded-2xl bg-white/80 flex items-center justify-center">
+                  <div className="h-28 sm:h-32 bg-brand-mint flex items-center justify-center">
+                    <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center">
                       <Icon className="w-7 h-7 text-brand-dark" />
                     </div>
                   </div>
@@ -275,7 +315,7 @@ export default function FindSpecialist() {
                     </div>
 
                     <div className="flex items-center gap-2 mb-3">
-                      <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${typeColors[s.specialist_type]}`}>
+                      <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${typeBadge}`}>
                         {typeLabels[s.specialist_type] || s.specialist_type}
                       </span>
                       <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
@@ -304,8 +344,8 @@ export default function FindSpecialist() {
                           <Mail className="w-4 h-4" />
                         </a>
                       )}
-                      {s.website && (
-                        <a href={s.website} target="_blank" rel="noreferrer" className="p-2 rounded-xl bg-gray-50 text-gray-600 hover:bg-brand-dark/10 hover:text-brand-dark transition-colors">
+                      {safeWebsiteUrl(s.website) && (
+                        <a href={safeWebsiteUrl(s.website)!} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-gray-50 text-gray-600 hover:bg-brand-dark/10 hover:text-brand-dark transition-colors">
                           <Globe className="w-4 h-4" />
                         </a>
                       )}

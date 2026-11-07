@@ -8,6 +8,7 @@ const typeLabels: Record<string, string> = {
   behaviorist: 'Behawiorysta',
   trainer: 'Trener',
   zoopsychologist: 'Zoopsycholog',
+  dietitian: 'Dietetyk',
 };
 
 export default function AdminSpecialists() {
@@ -59,10 +60,11 @@ export default function AdminSpecialists() {
 
   if (loading) {
     return (
-      <div className="text-center py-16 text-gray-500">
-        <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B6B4A] rounded-full animate-spin mx-auto mb-4" />
-        Ładowanie zgłoszeń...
-      </div>
+      <div className="space-y-4 animate-fade-in">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="pv-skeleton h-28 rounded-3xl" />
+          ))}
+        </div>
     );
   }
 
@@ -75,13 +77,13 @@ export default function AdminSpecialists() {
       {error && <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm">{error}</div>}
 
       {pending.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl bg-gray-50 border border-gray-200 border-dashed">
+        <div className="pv-card p-14 text-center">
           <p className="text-gray-500 text-sm">Brak zgłoszeń czekających na weryfikację.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {pending.map((s) => (
-            <div key={s.id} className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-3">
+            <div key={s.id} className="p-5 pv-card shadow-sm space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-gray-900">{s.name}</h3>
@@ -122,7 +124,7 @@ export default function AdminSpecialists() {
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="Powód odrzucenia (opcjonalnie)"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none"
+                    className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2 text-sm focus:outline-none"
                   />
                   <div className="flex gap-2">
                     <button
