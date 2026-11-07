@@ -12,6 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.5.3"),
+        .package(name: "CapacitorFirebaseMessaging", path: "../../../node_modules/.pnpm/@capacitor-firebase+messaging@8.5.2_@capacitor+core@8.5.3/node_modules/@capacitor-firebase/messaging"),
         .package(name: "CapacitorGeolocation", path: "../../../node_modules/.pnpm/@capacitor+geolocation@8.2.4_@capacitor+core@8.5.3/node_modules/@capacitor/geolocation")
     ],
     targets: [
@@ -20,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
+                .product(name: "CapacitorFirebaseMessaging", package: "CapacitorFirebaseMessaging"),
                 .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation")
             ]
         )
