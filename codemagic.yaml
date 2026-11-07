@@ -60,11 +60,16 @@ workflows:
           agvtool new-version -all "$BUILD_NUMBER"
       - name: Build IPA
         script: |
-          set -e
           xcode-project use-profiles
-          xcode-project build-ipa \
+          if ! xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME"; then
+            echo "======== XCODEBUILD ERRORS ========"
+            grep -h "error:" /tmp/xcodebuild_logs/*.log 2>/dev/null | sort -u | head -50
+            echo "======== ENTITLEMENT/PROFILE ISSUES ========"
+            grep -hi "doesn't include\|doesn't match\|entitlement\|provisioning profile" /tmp/xcodebuild_logs/*.log 2>/dev/null | grep -i "error\|fail\|doesn't" | sort -u | head -20
+            exit 65
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
