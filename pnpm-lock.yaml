@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@capacitor-firebase/authentication':
+        specifier: 8.6.0
+        version: 8.6.0(@capacitor/core@8.5.3)
       '@capacitor-firebase/messaging':
         specifier: 8.5.2
         version: 8.5.2(@capacitor/core@8.5.3)
@@ -29,6 +32,15 @@ importers:
         version: 8.5.3
 
 packages:
+
+  '@capacitor-firebase/authentication@8.6.0':
+    resolution: {integrity: sha512-ePL+7lVEt5eSFiTTI2Mi/B53oB00B8Wd7Nc3WroYiLybgnfFs49yvcO90cjImk2keY7sGT7CGgmquLcxVaHzyw==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+      firebase: ^12.6.0
+    peerDependenciesMeta:
+      firebase:
+        optional: true
 
   '@capacitor-firebase/messaging@8.5.2':
     resolution: {integrity: sha512-6EFxNeU/9teXdlQMmlHdjVqAMq+rr2po8oxLflvGuA6Xy+LPKbKccvamShXnTLjGO30beD6YmERNv5k9SxeGvg==}
@@ -434,6 +446,10 @@ packages:
     resolution: {integrity: sha512-p4a9I6X6nu6IhoGmBqAcbJy1mlC4j27vEPZX9F4L4/vZT3Lyq1VkFHw/V/PUcB9Buo+DG3iHkT0x3Qya58zc3g==}
 
 snapshots:
+
+  '@capacitor-firebase/authentication@8.6.0(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
 
   '@capacitor-firebase/messaging@8.5.2(@capacitor/core@8.5.3)':
     dependencies:
