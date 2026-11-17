@@ -1,1 +1,23 @@
-{"appId": "pl.petvio.mobile", "appName": "Petvio", "webDir": "public", "server": {"url": "https://petvio.pl/dashboard", "androidScheme": "https", "allowNavigation": ["petvio.pl", "*.petvio.pl"]}, "plugins": {"FirebaseAuthentication": {"skipNativeAuth": true, "providers": ["apple.com"]}}}
+{
+	"appId": "pl.petvio.mobile",
+	"appName": "Petvio",
+	"webDir": "public",
+	"server": {
+		"url": "https://petvio.pl/dashboard",
+		"androidScheme": "https",
+		"allowNavigation": ["petvio.pl", "*.petvio.pl"]
+	},
+	"android": {
+		"includePlugins": [
+			"@capacitor-firebase/authentication",
+			"@capacitor-firebase/messaging",
+			"@capacitor/geolocation"
+		]
+	},
+	"plugins": {
+		"FirebaseAuthentication": {
+			"skipNativeAuth": true,
+			"providers": ["apple.com"]
+		}
+	}
+}

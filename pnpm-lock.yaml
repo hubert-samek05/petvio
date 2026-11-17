@@ -23,6 +23,9 @@ importers:
       '@capacitor/ios':
         specifier: 8.5.3
         version: 8.5.3(@capacitor/core@8.5.3)
+      '@revenuecat/purchases-capacitor':
+        specifier: 14.1.0
+        version: 14.1.0(@capacitor/core@8.5.3)
     devDependencies:
       '@capacitor/cli':
         specifier: ^8.5.3
@@ -112,6 +115,14 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
+
+  '@revenuecat/purchases-capacitor@14.1.0':
+    resolution: {integrity: sha512-TnJF5DZFtg73ILxoyYQj2znq2fOwEmA5GaBCOvrcUwdqWXFL4p6ja3ZOne+i9eY8JAUvfijt2DVEeHL5gosl4A==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@revenuecat/purchases-typescript-internal-esm@20.1.0':
+    resolution: {integrity: sha512-v5m80eNfQ1mnDJJoR12+CwKyyvH/gaUQnd7QbqpCWEt+VsNlfaNvNxACyaaVlYH+5MTz47xmqrsnnOEBqq5z0Q==}
 
   '@types/fs-extra@8.1.5':
     resolution: {integrity: sha512-0dzKcwO+S8s2kuF5Z9oUWatQJj5Uq/iqphEtE3GQJVRRYm/tD1LglU2UnXi2A8jLq5umkGouOXOR9y0n613ZwQ==}
@@ -576,6 +587,13 @@ snapshots:
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
       minipass: 7.1.3
+
+  '@revenuecat/purchases-capacitor@14.1.0(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
+      '@revenuecat/purchases-typescript-internal-esm': 20.1.0
+
+  '@revenuecat/purchases-typescript-internal-esm@20.1.0': {}
 
   '@types/fs-extra@8.1.5':
     dependencies:
