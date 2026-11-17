@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
+import type { Feature } from 'geojson';
 import { MAP_STYLE_URL, add3dBuildings } from '@/lib/map';
 
 export type MapPoint = { lat: number; lng: number; timestamp?: number };
@@ -34,7 +35,7 @@ const currentHtml = `
     <style>@keyframes pv-walk-ping{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
   </div>`;
 
-const EMPTY_LINE: GeoJSON.Feature = {
+const EMPTY_LINE: Feature = {
   type: 'Feature',
   properties: {},
   geometry: { type: 'LineString', coordinates: [] },
