@@ -108,6 +108,75 @@ const sendDailyReminders = async () => {
     sent++;
   }
 
+  // 5) Urodziny pupili — w dniu urodzin
+  const bday = await query(
+    `SELECT p.id, p.name, p.user_id
+       FROM pets p
+      WHERE p.birth_date IS NOT NULL
+        AND COALESCE(p.is_frozen, false) = false
+        AND EXTRACT(MONTH FROM p.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(DAY FROM p.birth_date) = EXTRACT(DAY FROM CURRENT_DATE)`
+  );
+  for (const p of bday.rows) {
+    await sendIfNew(
+      p.user_id, 'pet_birthday',
+      `🎂 Dziś urodziny ${p.name}!`,
+      'Życzymy zdrowia i dużo smakołyków.',
+      '/dashboard/pets'
+    );
+    sent++;
+  }
+
+  // 6) Kończący się trial (za 2 dni) i anulowane subskrypcje (za 3 dni)
+  const trialEnd = await query(
+    `SELECT id FROM users
+      WHERE plan_source = 'trial'
+        AND plan_expires_at::date = CURRENT_DATE + INTERVAL '2 days'`
+  );
+  for (const u of trialEnd.rows) {
+    await sendIfNew(
+      u.id, 'trial_expiring',
+      'Okres próbny kończy się za 2 dni',
+      'Przedłuż dostęp premium, żeby nie stracić funkcji — zwierzęta ponad limit zostaną zamrożone.',
+      '/dashboard/subscription'
+    );
+    sent++;
+  }
+  const subEnd = await query(
+    `SELECT id FROM users
+      WHERE stripe_cancel_at_period_end = true
+        AND plan_expires_at::date = CURRENT_DATE + INTERVAL '3 days'`
+  );
+  for (const u of subEnd.rows) {
+    await sendIfNew(
+      u.id, 'subscription_expiring',
+      'Subskrypcja wygasa za 3 dni',
+      'Wznów ją, żeby zachować pełny dostęp — zwierzęta ponad limit zostaną zamrożone.',
+      '/dashboard/subscription'
+    );
+    sent++;
+  }
+
+  // 7) Wydarzenia grupowe — uczestnicy (going/interested) dzień wcześniej i w dniu
+  const gev = await query(
+    `SELECT DISTINCT ger.user_id, e.title AS event_title, e.starts_at, g.name AS group_name, g.id AS group_id
+       FROM group_event_responses ger
+       JOIN group_events e ON e.id = ger.event_id
+       JOIN pet_groups g ON g.id = e.group_id
+      WHERE ger.status IN ('going', 'interested')
+        AND e.starts_at::date IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '1 day')`
+  );
+  for (const ev of gev.rows) {
+    const today = new Date(ev.starts_at).toDateString() === new Date().toDateString();
+    await sendIfNew(
+      ev.user_id, 'group_event_reminder',
+      today ? `Dziś: „${ev.event_title}"` : `Jutro: „${ev.event_title}"`,
+      `Grupa „${ev.group_name}" — ${new Date(ev.starts_at).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`,
+      `/dashboard/groups/${ev.group_id}?tab=wydarzenia`
+    );
+    sent++;
+  }
+
   if (sent) console.log(`[reminders] wysłano ${sent} przypomnień`);
 };
 
