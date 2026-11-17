@@ -501,35 +501,37 @@ export default function LostPets() {
 
   return (
     <div className="space-y-5">
-      {/* Alert Banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-amber-900 mb-1 flex items-center flex-wrap gap-2">
-              Twoja lokalizacja: {userCity}
-              {geoStatus === 'loading' && <span className="text-xs font-normal text-amber-600">(pobieranie...)</span>}
-              {geoStatus === 'denied' && <span className="text-xs font-normal text-amber-600">(wymagana zgoda)</span>}
-            </h3>
-            <p className="text-sm text-amber-700 mb-3">
-              Wyświetlamy zaginione zwierzęta w promieniu {searchRadius} km od Ciebie.
+      {/* Pasek lokalizacji + promień */}
+      <div className="pv-card px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-9 h-9 rounded-full bg-brand-light flex items-center justify-center flex-shrink-0">
+            <MapPin className="w-[18px] h-[18px] text-brand-dark" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">
+              {geoStatus === 'loading' ? 'Ustalam lokalizację…' : userCity}
             </p>
-            <div className="flex flex-wrap gap-2">
-              {[5, 10, 25, 50, 100].map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setSearchRadius(r)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                    searchRadius === r
-                      ? 'bg-amber-600 text-white border-amber-600'
-                      : 'bg-white text-amber-700 border-amber-200 hover:border-amber-400'
-                  }`}
-                >
-                  {r} km
-                </button>
-              ))}
-            </div>
+            <p className="text-xs text-gray-500">
+              {geoStatus === 'denied'
+                ? 'Brak zgody na lokalizację — pokazuję okolice Warszawy'
+                : `Zaginione w promieniu ${searchRadius} km`}
+            </p>
           </div>
+        </div>
+        <div className="flex items-center gap-1 ml-auto bg-gray-100 rounded-full p-1">
+          {[5, 10, 25, 50, 100].map((r) => (
+            <button
+              key={r}
+              onClick={() => setSearchRadius(r)}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                searchRadius === r
+                  ? 'bg-white text-brand-dark shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {r}
+            </button>
+          ))}
         </div>
       </div>
 
