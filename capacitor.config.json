@@ -9,9 +9,11 @@
 	},
 	"android": {
 		"includePlugins": [
+			"@capacitor-community/background-geolocation",
 			"@capacitor-firebase/authentication",
 			"@capacitor-firebase/messaging",
-			"@capacitor/geolocation"
+			"@capacitor/geolocation",
+			"@capacitor/local-notifications"
 		]
 	},
 	"plugins": {
