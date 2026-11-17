@@ -721,6 +721,29 @@ export default function SubscriptionPage() {
         })}
       </div>
 
+      {/* Informacje wymagane przez App Store (3.1.2) — tylko na iOS */}
+      {isIOS && iapAvailable() && (
+        <div className="rounded-2xl bg-white border border-gray-100 p-5 space-y-2 text-center">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Płatność zostanie pobrana z konta Apple przy potwierdzeniu zakupu. Subskrypcja odnawia się
+            automatycznie, dopóki nie zostanie anulowana co najmniej 24 godziny przed końcem bieżącego
+            okresu. Zarządzanie i anulowanie: Ustawienia iPhone&#8217;a → Twoje imię → Subskrypcje.
+          </p>
+          <p className="text-xs text-gray-400">
+            <a href="/polityka-prywatnosci" className="underline hover:text-brand">Polityka prywatności</a>
+            {' · '}
+            <a
+              href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-brand"
+            >
+              Warunki korzystania (EULA)
+            </a>
+          </p>
+        </div>
+      )}
+
       {/* Porównanie */}
       <section className="pv-card overflow-hidden animate-slide-up">
         <div className="p-5 sm:p-6 border-b border-gray-100">
