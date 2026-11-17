@@ -380,6 +380,16 @@ body.modal-open nav {
   display: none !important;
 }
 
+/* iOS Safari przybliża stronę przy focusie na input z fontem <16px i nie pozwala
+   oddalić — wszystkie pola formularzy na urządzeniach dotykowych dostają 16px */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Reduced motion — szanujemy ustawienia systemowe */
 @media (prefers-reduced-motion: reduce) {
   *,
