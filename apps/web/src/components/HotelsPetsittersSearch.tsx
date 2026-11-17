@@ -427,6 +427,24 @@ export default function HotelsPetsittersSearch() {
         )}
       </div>
 
+      {/* Panel firmowy — wkrótce */}
+      <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-r from-violet-50 to-brand-mint/40 border border-violet-100">
+        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-5 h-5 text-violet-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">
+            Prowadzisz hotel dla zwierząt lub petsitting?
+          </p>
+          <p className="text-xs text-gray-500">
+            Panel firmowy, przejmowanie profilu i rezerwacje online
+          </p>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-100 px-2.5 py-1 rounded-full whitespace-nowrap">
+          Wkrótce
+        </span>
+      </div>
+
       {/* Mapa z wynikami */}
       {userLocation && (
         <PlacesMap

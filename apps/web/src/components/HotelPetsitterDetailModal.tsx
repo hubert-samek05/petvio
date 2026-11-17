@@ -200,6 +200,20 @@ export default function HotelPetsitterDetailModal({ location, onClose }: HotelPe
           >
             <Navigation className="w-4 h-4" /> Nawiguj w Google Maps
           </button>
+
+          {/* Panel firmowy — wkrótce */}
+          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-violet-50 border border-violet-100">
+            <Building2 className="w-5 h-5 text-violet-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-800">To Twoja firma?</p>
+              <p className="text-[11px] text-gray-500">
+                Przejmij profil i przyjmuj rezerwacje — panel firmowy
+              </p>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+              Wkrótce
+            </span>
+          </div>
         </div>
       </div>
     </div>
