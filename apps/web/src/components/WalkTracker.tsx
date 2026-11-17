@@ -538,16 +538,16 @@ export default function WalkTracker() {
 
   return (
     <div className="space-y-7">
-      {/* ====== STATYSTYKI ====== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* ====== STATYSTYKI (kompaktowe) ====== */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {loadingData ? (
           <><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /></>
         ) : (
           <>
-            <StatCard icon={Footprints} label="Spacery w tym tygodniu" value={thisWeek.length} iconBg="bg-brand-mint" iconColor="text-brand-dark" stagger="stagger-1" />
-            <StatCard icon={Route} label="Km w tym tygodniu" value={(weekDistance / 1000).toFixed(1)} animate={false} iconBg="bg-brand-peach" iconColor="text-brand-dark" stagger="stagger-2" />
-            <StatCard icon={MapPin} label="Łączny dystans" value={`${(totalDistance / 1000).toFixed(1)} km`} animate={false} iconBg="bg-brand-light" iconColor="text-brand-dark" stagger="stagger-3" />
-            <StatCard icon={Clock} label="Łączny czas" value={`${Math.floor(totalSeconds / 3600)}h ${Math.floor((totalSeconds % 3600) / 60)}min`} animate={false} iconBg="bg-brand-mint" iconColor="text-brand-dark" stagger="stagger-4" />
+            <StatCard compact icon={Footprints} label="Spacery w tygodniu" value={thisWeek.length} iconBg="bg-brand-mint" iconColor="text-brand-dark" stagger="stagger-1" />
+            <StatCard compact icon={Route} label="Km w tygodniu" value={(weekDistance / 1000).toFixed(1)} animate={false} iconBg="bg-brand-peach" iconColor="text-brand-dark" stagger="stagger-2" />
+            <StatCard compact icon={MapPin} label="Łączny dystans" value={`${(totalDistance / 1000).toFixed(1)} km`} animate={false} iconBg="bg-brand-light" iconColor="text-brand-dark" stagger="stagger-3" />
+            <StatCard compact icon={Clock} label="Łączny czas" value={`${Math.floor(totalSeconds / 3600)}h ${Math.floor((totalSeconds % 3600) / 60)}min`} animate={false} iconBg="bg-brand-mint" iconColor="text-brand-dark" stagger="stagger-4" />
           </>
         )}
       </div>
@@ -627,9 +627,13 @@ export default function WalkTracker() {
         </div>
       )}
 
-      {/* ====== MAPA Z KONTROLKAMI (Strava-style) ====== */}
+      {/* ====== MAPA Z KONTROLKAMI (Strava-style) — rośnie podczas spaceru ====== */}
       <div className="pv-card overflow-hidden animate-slide-up stagger-6">
-        <div className="h-80 sm:h-[26rem] relative bg-brand-mint/40">
+        <div
+          className={`relative bg-brand-mint/40 transition-all duration-500 ease-in-out ${
+            isTracking ? 'h-[60vh] sm:h-[65vh]' : 'h-72 sm:h-80'
+          }`}
+        >
           <WalkMap points={points} current={currentLocation} following={isTracking && !isPaused} className="h-full" />
 
           {/* Statystyki na żywo — nakładka na mapę */}

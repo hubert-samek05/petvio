@@ -116,7 +116,11 @@ export default function WalkMap({ points, current, following = false, className 
       syncRoute();
     });
     mapRef.current = map;
+    // Kontener moze zmieniac rozmiar (np. mapa rosnie przy starcie spaceru)
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(containerRef.current);
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
       loaded.current = false;

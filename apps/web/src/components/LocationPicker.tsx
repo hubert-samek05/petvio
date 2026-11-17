@@ -72,7 +72,10 @@ export default function LocationPicker({
       map.getCanvas().style.cursor = 'crosshair';
     }
     mapRef.current = map;
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(containerRef.current);
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
