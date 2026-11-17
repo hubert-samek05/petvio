@@ -64,18 +64,24 @@ export default function WalkMap({ points, current, following = false, className 
       properties: {},
       geometry: { type: 'LineString', coordinates: p.map((x) => [x.lng, x.lat]) },
     });
+    // setLngLat MUSI byc przed addTo — marker bez _lngLat crashuje w _update (smartWrap)
     if (p.length >= 1) {
       if (!startRef.current)
-        startRef.current = new maplibregl.Marker({ element: el(startHtml) }).addTo(map);
-      startRef.current.setLngLat([p[0].lng, p[0].lat]);
+        startRef.current = new maplibregl.Marker({ element: el(startHtml) })
+          .setLngLat([p[0].lng, p[0].lat])
+          .addTo(map);
+      else startRef.current.setLngLat([p[0].lng, p[0].lat]);
     } else {
       startRef.current?.remove();
       startRef.current = null;
     }
     if (p.length >= 2) {
+      const last = p[p.length - 1];
       if (!endRef.current)
-        endRef.current = new maplibregl.Marker({ element: el(endHtml) }).addTo(map);
-      endRef.current.setLngLat([p[p.length - 1].lng, p[p.length - 1].lat]);
+        endRef.current = new maplibregl.Marker({ element: el(endHtml) })
+          .setLngLat([last.lng, last.lat])
+          .addTo(map);
+      else endRef.current.setLngLat([last.lng, last.lat]);
     } else {
       endRef.current?.remove();
       endRef.current = null;
