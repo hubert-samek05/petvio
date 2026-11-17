@@ -30,6 +30,8 @@ import PageHeader from '@/components/PageHeader';
 import SocialFeed from '@/components/social/SocialFeed';
 import { SocialApi } from '@/components/social/shared';
 import { authApi, postsApi } from '@/lib/api';
+import { unregisterPush } from '@/lib/push';
+import { logoutIAP } from '@/lib/iap';
 
 interface ProfileUser {
   id: number;
@@ -145,10 +147,12 @@ export default function ProfilePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [showEditModal, showPasswordModal, showDeleteModal]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await unregisterPush();
+    await logoutIAP();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/welcome');
   };
 
   const flash = (msg: string) => {
@@ -215,10 +219,12 @@ export default function ProfilePage() {
     setSubmitting(true);
     setModalError('');
     try {
+      await unregisterPush();
+      await logoutIAP();
       await authApi.deleteAccount(deletePassword);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      router.push('/');
+      router.push('/welcome');
     } catch (e: any) {
       setModalError(e?.response?.data?.error?.message || 'Nie udało się usunąć konta.');
       setSubmitting(false);
