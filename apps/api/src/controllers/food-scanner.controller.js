@@ -1,5 +1,6 @@
 const { query } = require('../config/database');
-const { getActiveSportDietForPet, checkKeywordOverlap } = require('../utils/sport-diet.utils');
+const { petFrozen } = require('../utils/subscription');
+const { getActiveSportDietForPet, checkKeywordOverlap, keywordItemMatches } = require('../utils/sport-diet.utils');
 
 const INGREDIENT_RULES = [
   // Mięsa i ryby
@@ -157,6 +158,51 @@ const INGREDIENT_RULES = [
   { match: ['probiotic', 'probiotyk', 'probiotics', 'kultury bakterii'], dog: 'good', cat: 'good', desc: 'Wspiera mikrobiom jelitowy' },
   { match: ['prebiotic', 'prebiotyk', 'inulin', 'inulina', 'fos'], dog: 'good', cat: 'good', desc: 'Pokarm dla dobrych bakterii jelitowych' },
   { match: ['antioxidant', 'przeciwutleniacz', 'tokoferole', 'rosemary extract', 'wyciąg z rozmarynu'], dog: 'good', cat: 'good', desc: 'Naturalne konserwanty i przeciwutleniacze' },
+
+  // ====== WARIANTY WIELOJĘZYCZNE (OPFF zwraca składy po fr/de/nl/es/it) ======
+  // Mięsa i ryby
+  { match: ['volaille', 'geflügel', 'geflugel', 'kip', 'gevogelte', 'pollame', 'aves'], dog: 'good', cat: 'good', desc: 'Drób — łatwo strawne źródło białka' },
+  { match: ['poulet', 'huhn', 'huhnchen', 'hähnchen', 'hahnchen', 'pollo'], dog: 'good', cat: 'good', desc: 'Kurczak — łatwo strawne źródło białka' },
+  { match: ['dinde', 'pute', 'kalkoen', 'pavo'], dog: 'good', cat: 'good', desc: 'Indyk — lekkie źródło białka' },
+  { match: ['canard', 'ente', 'eend', 'pato'], dog: 'good', cat: 'good', desc: 'Kaczka — dobre źródło białka' },
+  { match: ['boeuf', 'rind', 'rindfleisch', 'rund', 'rundvlees', 'ternera', 'manzo', 'buey'], dog: 'good', cat: 'good', desc: 'Wołowina — cenne źródło białka i żelaza' },
+  { match: ['agneau', 'lamm', 'lamsvlees', 'cordero', 'agnello'], dog: 'good', cat: 'good', desc: 'Jagnięcina — mało alergenne źródło białka' },
+  { match: ['porc ', 'porc,', 'schwein', 'schweinefleisch', 'varken', 'varkensvlees', 'cerdo', 'maiale'], dog: 'caution', cat: 'caution', desc: 'Wieprzowina — tłuste mięso, z umiarem' },
+  { match: ['gibier', 'wild', 'wildvlees', 'hirsch', 'venison', 'cervo'], dog: 'good', cat: 'good', desc: 'Dziczyzna — chude, hipoalergiczne białko' },
+  { match: ['lapin', 'kaninchen', 'konijn', 'conejo', 'coniglio'], dog: 'good', cat: 'good', desc: 'Królik — hipoalergiczne źródło białka' },
+  { match: ['saumon', 'lachs', 'zalm', 'salmone', 'salmon '], dog: 'good', cat: 'good', desc: 'Łosoś — białko i kwasy omega-3' },
+  { match: ['thon', 'thunfisch', 'tonijn', 'atun', 'tonno'], dog: 'caution', cat: 'caution', desc: 'Tuńczyk — tłusta ryba, z umiarem (rtęć)' },
+  { match: ['poisson', 'fisch', 'vis', 'pescado', 'pesce'], dog: 'good', cat: 'good', desc: 'Ryba — białko i kwasy omega-3' },
+  { match: ['sardine', 'sardinen', 'sardina'], dog: 'good', cat: 'good', desc: 'Sardynka — cenna ryba' },
+  { match: ['hareng', 'hering', 'haring', 'aringa', 'sledz'], dog: 'good', cat: 'good', desc: 'Śledź — cenne kwasy omega-3' },
+  { match: ['truite', 'forelle', 'forel', 'trucha', 'trota'], dog: 'good', cat: 'good', desc: 'Pstrąg — dobre źródło białka' },
+  { match: ['crevettes', 'garnelen', 'garnalen', 'gambas', 'gamberi', 'shrimp'], dog: 'good', cat: 'good', desc: 'Krewetki — chude białko' },
+  { match: ['foie', 'leber', 'lever', 'higado', 'fegato', 'liver'], dog: 'good', cat: 'good', desc: 'Wątroba — bogata w witaminę A, z umiarem' },
+  { match: ['oeuf', 'oeufs', 'eier', 'ei ', 'eieren', 'huevo', 'uova'], dog: 'good', cat: 'good', desc: 'Jajka — pełnowartościowe białko' },
+
+  // Zboża, warzywa, dodatki
+  { match: ['ble ', 'weizen', 'tarwe', 'trigo', 'frumento'], dog: 'caution', cat: 'caution', desc: 'Pszenica — częsty alergen i wypełniacz' },
+  { match: ['mais', 'maiz', 'mais ', 'maiskorrels', 'granturco'], dog: 'caution', cat: 'caution', desc: 'Kukurydza — tani wypełniacz' },
+  { match: ['riz', 'reis', 'rijst', 'arroz', 'riso'], dog: 'good', cat: 'caution', desc: 'Ryż — dobry dodatek dla psa' },
+  { match: ['avoine', 'hafer', 'haver', 'avena', 'haferflocken'], dog: 'good', cat: 'caution', desc: 'Owies — zdrowe zboże dla psa' },
+  { match: ['orge', 'gerste', 'gerst', 'cebada', 'orzo', 'barley'], dog: 'good', cat: 'caution', desc: 'Jęczmień — źródło błonnika' },
+  { match: ['carotte', 'karotten', 'mohre', 'wortel', 'zanahoria', 'carota'], dog: 'good', cat: 'good', desc: 'Marchew — błonnik i beta-karoten' },
+  { match: ['patate', 'kartoffel', 'aardappel', 'patata', 'patata dolce'], dog: 'good', cat: 'caution', desc: 'Ziemniaki — dla kota z umiarem' },
+  { match: ['petits pois', 'erbsen', 'erwten', 'guisantes', 'piselli', 'pois'], dog: 'good', cat: 'caution', desc: 'Groszek — błonnik i białko roślinne' },
+  { match: ['betterave', 'rote bete', 'biet', 'remolacha', 'barbabietola', 'beet pulp'], dog: 'good', cat: 'good', desc: 'Buraki — źródło błonnika' },
+  { match: ['cereales', 'getreide', 'granen', 'cereales ', 'cereali'], dog: 'caution', cat: 'caution', desc: 'Zboża — często wypełniacz niskiej jakości' },
+  { match: ['cellulose', 'cellulosa', 'bion', 'rohfaser', 'ruwe celstof', 'fibra'], dog: 'caution', cat: 'caution', desc: 'Błonnik/włókno — neutralny lub wypełniacz' },
+  { match: ['levure', 'hefe', 'gist', 'levadura', 'lievito', 'yeast'], dog: 'good', cat: 'good', desc: 'Drożdze — źródło witamin z grupy B' },
+  { match: ['propyleenglycol', 'propylene glycol', 'propylenglycol'], dog: 'caution', cat: 'avoid', desc: 'Glikol propylenowy — toksyczny dla kotów!' },
+  { match: ['oignon', 'zwiebel', 'ui ', 'cebolla', 'cipolla', 'onion'], dog: 'avoid', cat: 'avoid', desc: 'Cebula — toksyczna, wywołuje anemię' },
+  { match: ['ail ', 'knoblauch', 'knoflook', 'ajo ', 'aglio', 'garlic'], dog: 'avoid', cat: 'avoid', desc: 'Czosnek — toksyczny jak cebula' },
+  { match: ['raisin', 'rosinen', 'rozijn', 'uva pasa', 'passa', 'raisin '], dog: 'avoid', cat: 'avoid', desc: 'Rodzynki — toksyczne dla nerek' },
+  { match: ['chocolat', 'schokolade', 'chocolade', 'cioccolato', 'kakao', 'cacao'], dog: 'avoid', cat: 'avoid', desc: 'Czekolada/kakao — teobromina, toksyczne' },
+  { match: ['vitamines', 'vitamine ', 'vitaminen', 'vitaminas', 'vitamins'], dog: 'good', cat: 'good', desc: 'Witaminy — niezbędne składniki odżywcze' },
+  { match: ['mineraux', 'mineralien', 'mineralen', 'minerales', 'minerali'], dog: 'good', cat: 'good', desc: 'Minerały — niezbędne składniki odżywcze' },
+  { match: ['conservateurs', 'konservierungsstoffe', 'conservanten', 'conservantes', 'conservanti', 'preservative'], dog: 'caution', cat: 'caution', desc: 'Konserwanty — sprawdź czy naturalne' },
+  { match: ['colorants', 'farbstoffe', 'kleurstoffen', 'colorantes', 'coloranti', 'colorant'], dog: 'caution', cat: 'caution', desc: 'Barwniki — zbędny dodatek' },
+  { match: ['hydrolysat', 'hydrolysat ', 'hydrolysat de', 'gehydrolyseerd', 'hydrolisat'], dog: 'good', cat: 'good', desc: 'Hydrolizat — dobrze strawne białko' },
 ];
 
 function normalize(text) {
@@ -189,18 +235,35 @@ function parseIngredients(text) {
     .replace(/-/g, ' ')
     .replace(/\s+/g, ' ');
 
+  const JUNK_TOKEN = /^[\d\s.,]+$|^\d|\b(mg|g|kg|kcal|kj|iu|ie|mcg|µg|ppm|cfu)\b\.?$/i;
+  const INSTRUCTION = /(endroit frais|przechow|store in|serve|swiezej wody|fresh water|feeding guide|dawkowanie|dals? 0|recipient|raadpleeg|zu verwenden|room temperature|direct sunlight|karmienia|ohren|ants|access en permanence)/i;
+
   return normalized
     .split(/[,;.|]| i | oraz | and | lub | or | z | w /i)
     .map((s) => s.trim())
-    .filter((s) => s.length > 1);
+    .filter((s) => s.length >= 3 && !JUNK_TOKEN.test(s) && !INSTRUCTION.test(s));
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function findRule(token, petType) {
+  const normalized = normalize(token);
+  if (!normalized) return { status: 'unknown', desc: 'Brak danych o tym składniku w bazie' };
   for (const rule of INGREDIENT_RULES) {
-    const normalized = normalize(token);
     for (const m of rule.match) {
       const nm = normalize(m);
-      if (normalized.includes(nm)) {
+      if (!nm) continue;
+      const esc = escapeRegExp(nm);
+      // Krótkie wzorce (<5 znaków, np. "por", "ser") wymagają pełnego słowa,
+      // żeby nie łapać przypadkowych podciągów ("porc", "conserver").
+      // Dłuższe wzorce dopasowujemy jako temat na początku słowa
+      // (np. "wołowin" -> "wołowiny").
+      const re = nm.length < 5
+        ? new RegExp(`(^|[^\\w])${esc}([^\\w]|$)`, 'u')
+        : new RegExp(`(^|[^\\w])${esc}[\\w]*`, 'u');
+      if (re.test(normalized)) {
         return { status: rule[petType] || rule.dog || 'unknown', desc: rule.desc };
       }
     }
@@ -294,29 +357,173 @@ function analyzeIngredients(text, petType = 'dog', sportDiet = null) {
   return response;
 }
 
+// ====== ŹRÓDŁA DANYCH O PRODUKCIE ======
+
+// Open Food Facts / Open Pet Food Facts — pełny rekord produktu.
+async function fetchOFFProduct(barcode) {
+  const bases = [
+    'https://world.openpetfoodfacts.org',
+    'https://world.openfoodfacts.org',
+  ];
+  for (const base of bases) {
+    try {
+      const response = await fetch(
+        `${base}/api/v0/product/${encodeURIComponent(barcode)}.json`,
+        { headers: { 'User-Agent': 'Petvio-FoodScanner/1.0' } }
+      );
+      const data = await response.json();
+      if (data.status === 1 && data.product) return data.product;
+    } catch (err) {
+      console.error(`OFF fetch error (${base}):`, err.message);
+    }
+  }
+  return null;
+}
+
+// Zewnętrzne lookupy EAN — zwracają przynajmniej nazwę i markę.
+async function fetchExternalBarcode(barcode) {
+  const sources = [
+    {
+      url: `https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(barcode)}`,
+      parse: (d) => {
+        const item = d.items && d.items[0];
+        return item ? { name: item.title || '', brand: item.brand || '' } : null;
+      },
+    },
+    {
+      url: `https://barcode.monster/api/${encodeURIComponent(barcode)}`,
+      parse: (d) => (d.description || d.company ? { name: d.description || '', brand: d.company || '' } : null),
+    },
+    {
+      url: `https://go-upc.com/api/v1/code/${encodeURIComponent(barcode)}`,
+      parse: (d) => (d.product ? { name: d.product.name || '', brand: d.product.brand || '' } : null),
+    },
+  ];
+
+  for (const src of sources) {
+    try {
+      const response = await fetch(src.url, {
+        headers: { 'User-Agent': 'Petvio-FoodScanner/1.0', Accept: 'application/json' },
+      });
+      if (!response.ok) continue;
+      const data = await response.json();
+      const meta = src.parse(data);
+      if (meta && (meta.name || meta.brand)) return meta;
+    } catch (err) {
+      // cichy fallback na kolejne źródło
+    }
+  }
+  return null;
+}
+
+// ====== Diety specjalistyczne — konflikty z produktem ======
+
+const normalizeKeyword = (s) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+// Sprawdza czy składniki produktu kolidują z zakazanymi
+// składnikami aktywnych diet specjalistycznych pupila.
+async function getSpecialDietConflicts(petId, ingredientsText) {
+  if (!petId || !ingredientsText) return [];
+  const result = await query(
+    `SELECT name, diet_type, forbidden_foods
+     FROM special_diets
+     WHERE pet_id = $1 AND is_active = true`,
+    [petId]
+  );
+  const ingredientsNorm = normalizeKeyword(ingredientsText);
+  const conflicts = [];
+  for (const diet of result.rows) {
+    if (!diet.forbidden_foods) continue;
+    const forbidden = diet.forbidden_foods
+      .split(/[,;\n]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 3);
+    const matched = forbidden.filter((f) => keywordItemMatches(ingredientsNorm, f));
+    if (matched.length > 0) {
+      conflicts.push({
+        dietName: diet.name,
+        dietType: diet.diet_type,
+        matchedFoods: matched,
+      });
+    }
+  }
+  return conflicts;
+}
+
+// ====== HANDLERY ======
+
+const checkPetAccess = async (petId, userId, res) => {
+  if (!petId) return true;
+  const r = await query('SELECT is_frozen FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
+  if (r.rows.length === 0) {
+    res.status(404).json({ error: { message: 'Zwierzę nie zostało znalezione', status: 404 } });
+    return false;
+  }
+  if (r.rows[0].is_frozen) {
+    petFrozen(res);
+    return false;
+  }
+  return true;
+};
+
 async function scanBarcode(req, res) {
   try {
     const { barcode, petType, petId } = req.query;
     if (!barcode || barcode.length < 5) {
       return res.status(400).json({ error: { message: 'Nieprawidłowy kod kreskowy', status: 400 } });
     }
+    if (!(await checkPetAccess(petId, req.user.userId, res))) return;
 
     const sportDiet = petId ? await getActiveSportDietForPet(petId) : null;
 
-    const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
-    const data = await response.json();
+    // Kaskada źródeł danych o produkcie. Karmy dla zwierząt są
+    // przede wszystkim w Open Pet Food Facts; kolejne serwisy
+    // zwracają tylko nazwę i markę — NIGDY nie podstawiamy składu
+    // innego produktu, bo to byłaby błędna analiza.
+    let product = await fetchOFFProduct(barcode);
+    let lookupMeta = null;
 
-    if (data.status !== 1 || !data.product) {
+    if (!product) {
+      const ext = await fetchExternalBarcode(barcode);
+      if (ext && (ext.name || ext.brand)) {
+        lookupMeta = ext;
+      }
+    }
+
+    if (!product && !lookupMeta) {
       return res.status(200).json({
         found: false,
         barcode,
-        message: 'Nie znaleziono produktu w bazie Open Food Facts. Wpisz skład ręcznie.',
+        message: 'Nie znaleziono produktu w żadnej bazie. Wpisz skład ręcznie.',
       });
     }
 
-    const product = data.product;
+    if (!product) {
+      // Znamy tylko nazwę/markę z zewnętrznego lookupu — bez składu.
+      return res.status(200).json({
+        found: true,
+        partial: true,
+        barcode,
+        product: {
+          barcode,
+          name: lookupMeta.name || 'Nieznany produkt',
+          brands: lookupMeta.brand || '',
+          image: '',
+          ingredientsText: '',
+          allergens: [],
+          nutrients: null,
+        },
+        analysis: null,
+        message: 'Znaleziono produkt, ale baza nie zawiera składu. Wpisz skład ręcznie z opakowania.',
+      });
+    }
+
     const ingredientsText =
+      product.ingredients_text_pl ||
       product.ingredients_text_en ||
+      product.ingredients_text_de ||
+      product.ingredients_text_fr ||
       product.ingredients_text ||
       (Array.isArray(product.ingredients)
         ? product.ingredients.map((i) => (i.id ? i.id.replace(/^[a-z]{2}:/, '').replace(/-/g, ' ') : i.text)).join(', ')
@@ -328,8 +535,8 @@ async function scanBarcode(req, res) {
       barcode,
       product: {
         barcode,
-        name: product.product_name || product.generic_name || 'Nieznany produkt',
-        brands: product.brands || '',
+        name: product.product_name || product.generic_name || (lookupMeta && lookupMeta.name) || 'Nieznany produkt',
+        brands: product.brands || (lookupMeta && lookupMeta.brand) || '',
         image: product.image_front_small_url || product.image_front_url || '',
         ingredientsText,
         allergens: product.allergens ? product.allergens.split(',').map((a) => a.trim()).filter(Boolean) : [],
@@ -365,10 +572,15 @@ async function analyze(req, res) {
     if (!ingredients || !ingredients.trim()) {
       return res.status(400).json({ error: { message: 'Wpisz skład do analizy', status: 400 } });
     }
+    if (!(await checkPetAccess(petId, req.user.userId, res))) return;
 
     const sportDiet = petId ? await getActiveSportDietForPet(petId) : null;
 
-    res.json(analyzeIngredients(ingredients, petType || 'dog', sportDiet));
+    const analysis = analyzeIngredients(ingredients, petType || 'dog', sportDiet);
+    if (petId) {
+      analysis.dietConflicts = await getSpecialDietConflicts(petId, ingredients);
+    }
+    res.json(analysis);
   } catch (error) {
     console.error('Analyze ingredients error:', error);
     res.status(500).json({
@@ -380,7 +592,58 @@ async function analyze(req, res) {
   }
 }
 
+// Wyszukiwanie produktu po nazwie — fallback gdy kod nie istnieje.
+async function searchProducts(req, res) {
+  try {
+    const { q, petType } = req.query;
+    if (!q || q.trim().length < 3) {
+      return res.status(400).json({ error: { message: 'Wpisz co najmniej 3 znaki', status: 400 } });
+    }
+
+    const bases = [
+      'https://world.openpetfoodfacts.org',
+      'https://world.openfoodfacts.org',
+    ];
+
+    const seen = new Set();
+    const results = [];
+
+    for (const base of bases) {
+      try {
+        const url = `${base}/cgi/search.pl?search_terms=${encodeURIComponent(q.trim())}&search_simple=1&action=process&json=1&page_size=10`;
+        const response = await fetch(url, { headers: { 'User-Agent': 'Petvio-FoodScanner/1.0' } });
+        const data = await response.json();
+        for (const p of data.products || []) {
+          if (!p.code || seen.has(p.code)) continue;
+          seen.add(p.code);
+          const hasIngredients = Boolean(
+            p.ingredients_text || p.ingredients_text_en || p.ingredients_text_de ||
+            p.ingredients_text_fr || (p.ingredients && p.ingredients.length)
+          );
+          results.push({
+            barcode: p.code,
+            name: p.product_name || p.generic_name || 'Nieznany produkt',
+            brands: p.brands || '',
+            image: p.image_front_small_url || p.image_front_url || '',
+            hasIngredients,
+          });
+          if (results.length >= 12) break;
+        }
+        if (results.length >= 12) break;
+      } catch (err) {
+        console.error(`Product search error (${base}):`, err.message);
+      }
+    }
+
+    res.json({ results, petType: petType || 'dog' });
+  } catch (error) {
+    console.error('Search products error:', error);
+    res.status(500).json({ error: { message: 'Błąd podczas wyszukiwania produktu', status: 500 } });
+  }
+}
+
 module.exports = {
   scanBarcode,
   analyze,
+  searchProducts,
 };

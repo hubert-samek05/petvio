@@ -5,6 +5,7 @@ const healthRecordController = require('../controllers/health-record.controller'
 
 router.use(authenticateToken);
 
+router.get('/', healthRecordController.getAllRecords);
 router.get('/pet/:petId', healthRecordController.getRecordsByPet);
 router.post('/', healthRecordController.createRecord);
 router.get('/:id', healthRecordController.getRecordById);

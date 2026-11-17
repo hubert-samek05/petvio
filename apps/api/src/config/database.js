@@ -1,5 +1,9 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 require('dotenv').config();
+
+// DATE (OID 1082) zwracamy jako tekst YYYY-MM-DD — domyślnie pg robi z niego Date w strefie serwera,
+// co po serializacji do JSON przesuwa dzień o -1 przy każdym zapisie formularza.
+types.setTypeParser(1082, (value) => value);
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',

@@ -1,4 +1,5 @@
 const { query } = require('../config/database');
+const { petFrozen } = require('../utils/subscription');
 const { getActiveSportDietForPet } = require('../utils/sport-diet.utils');
 
 const BREED_FACTORS = {
@@ -100,7 +101,7 @@ const GOAL_FACTORS = {
 
 const MACROS = {
   dog: { protein: 0.25, fat: 0.15, carbs: 0.45 },
-  cat: { protein: 0.30, fat: 0.20, carbs: 0.35 },
+  cat: { protein: 0.45, fat: 0.35, carbs: 0.20 },
 };
 
 function normalizeString(str) {
@@ -192,10 +193,32 @@ async function calculate(req, res) {
     let finalLifeStage = lifeStage;
     let sportDiet = null;
 
+    // Validation of explicitly provided values
+    if (petId !== undefined && petId !== null && petId !== '' && !Number.isInteger(Number(petId))) {
+      return res.status(400).json({
+        error: { message: 'Nieprawidłowy identyfikator zwierzęcia', status: 400 },
+      });
+    }
+    if (ageYears !== undefined && ageYears !== null && (!Number.isFinite(parseFloat(ageYears)) || ageYears < 0 || ageYears > 40)) {
+      return res.status(400).json({
+        error: { message: 'Wiek musi być w zakresie 0–40 lat', status: 400 },
+      });
+    }
+    if (ageMonths !== undefined && ageMonths !== null && (!Number.isInteger(ageMonths) || ageMonths < 0 || ageMonths > 480)) {
+      return res.status(400).json({
+        error: { message: 'Wiek musi być w zakresie 0–480 miesięcy', status: 400 },
+      });
+    }
+    if (meals !== undefined && meals !== null && (!Number.isInteger(Number(meals)) || Number(meals) < 1 || Number(meals) > 8)) {
+      return res.status(400).json({
+        error: { message: 'Liczba posiłków musi być w zakresie 1–8', status: 400 },
+      });
+    }
+
     // If petId provided, fetch pet data and use as defaults
     if (petId) {
       const result = await query(
-        'SELECT id, name, species, breed, birth_date, weight FROM pets WHERE id = $1 AND user_id = $2',
+        'SELECT id, name, species, breed, birth_date, weight, is_frozen FROM pets WHERE id = $1 AND user_id = $2',
         [petId, userId]
       );
       if (result.rows.length === 0) {
@@ -203,6 +226,7 @@ async function calculate(req, res) {
           error: { message: 'Nie znaleziono zwierzęcia', status: 404 },
         });
       }
+      if (result.rows[0].is_frozen) return petFrozen(res);
       const pet = result.rows[0];
       if (!finalSpecies) finalSpecies = pet.species === 'cat' ? 'cat' : 'dog';
       if (!finalWeight && pet.weight) finalWeight = parseFloat(pet.weight);
@@ -220,9 +244,10 @@ async function calculate(req, res) {
       });
     }
 
-    if (!finalWeight || finalWeight <= 0) {
+    finalWeight = parseFloat(finalWeight);
+    if (!Number.isFinite(finalWeight) || finalWeight <= 0 || finalWeight > 150) {
       return res.status(400).json({
-        error: { message: 'Podaj prawidłową wagę w kg', status: 400 },
+        error: { message: 'Podaj prawidłową wagę w kg (0,1–150)', status: 400 },
       });
     }
 
@@ -237,21 +262,47 @@ async function calculate(req, res) {
       finalLifeStage = inferLifeStage(finalSpecies, finalAgeMonths);
     }
 
+    const activityKey = activity || 'moderate';
+    if (!ACTIVITY_FACTORS[finalSpecies][activityKey]) {
+      return res.status(400).json({
+        error: { message: 'Nieprawidłowy poziom aktywności', status: 400 },
+      });
+    }
+    if (!LIFE_STAGE_FACTORS[finalSpecies][finalLifeStage]) {
+      return res.status(400).json({
+        error: { message: `Nieprawidłowy etap życia dla gatunku „${finalSpecies}"`, status: 400 },
+      });
+    }
+    const bodyConditionKey = bodyCondition || 'ideal';
+    if (!BODY_CONDITION_FACTORS[bodyConditionKey]) {
+      return res.status(400).json({
+        error: { message: 'Nieprawidłowa kondycja ciała', status: 400 },
+      });
+    }
+    const goalKey = goal || 'maintain';
+    if (!GOAL_FACTORS[goalKey]) {
+      return res.status(400).json({
+        error: { message: 'Nieprawidłowy cel żywieniowy', status: 400 },
+      });
+    }
+
     const speciesMap = {
       dog: 'pies',
       cat: 'kot',
     };
 
-    const activityFactor = (ACTIVITY_FACTORS[finalSpecies] || ACTIVITY_FACTORS.dog)[activity] || 1.2;
-    const lifeStageFactor = (LIFE_STAGE_FACTORS[finalSpecies] || LIFE_STAGE_FACTORS.dog)[finalLifeStage] || 1.3;
-    const bodyConditionFactor = BODY_CONDITION_FACTORS[bodyCondition] || 1.0;
-    const goalFactor = GOAL_FACTORS[goal] || 1.0;
+    const activityFactor = ACTIVITY_FACTORS[finalSpecies][activityKey];
+    const lifeStageFactor = LIFE_STAGE_FACTORS[finalSpecies][finalLifeStage];
+    const bodyConditionFactor = BODY_CONDITION_FACTORS[bodyConditionKey];
+    const goalFactor = GOAL_FACTORS[goalKey];
     const breedFactor = getBreedFactor(finalSpecies, finalBreed);
     const sterilizedFactor = isSterilized === true ? 0.9 : 1.0;
     const sportDietFactor = sportDiet ? parseFloat(sportDiet.calorie_multiplier) : 1.0;
 
     const rer = 70 * Math.pow(finalWeight, 0.75);
-    const multiplier = activityFactor * lifeStageFactor * bodyConditionFactor * goalFactor * breedFactor * sterilizedFactor * sportDietFactor;
+    const rawMultiplier = activityFactor * lifeStageFactor * bodyConditionFactor * goalFactor * breedFactor * sterilizedFactor * sportDietFactor;
+    // Zabezpieczenie przed nierealnymi wartościami przy skrajnych kombinacjach czynników
+    const multiplier = Math.min(Math.max(rawMultiplier, 0.5), 6.0);
     const dailyCalories = Math.round(rer * multiplier);
     const mealsCount = meals && meals > 0 ? parseInt(meals, 10) : 2;
     const perMeal = Math.round(dailyCalories / mealsCount);
@@ -267,10 +318,19 @@ async function calculate(req, res) {
     if (mealsCount > 1) {
       recommendation += ` Podzielone na ${mealsCount} posiłki daje około ${perMeal} kcal na posiłek.`;
     }
-    if (goal === 'lose') {
+    if (goalKey === 'lose') {
       recommendation += ' Wartość uwzględnia redukcję masy ciała.';
-    } else if (goal === 'gain') {
+      if (bodyConditionKey === 'overweight' || bodyConditionKey === 'obese') {
+        recommendation += ' Przy większej nadwadze porcje warto liczyć względem wagi docelowej, a nie aktualnej — ustal ją z weterynarzem.';
+      }
+    } else if (goalKey === 'gain') {
       recommendation += ' Wartość uwzględnia wzrost masy ciała.';
+    }
+    if (finalLifeStage === 'pregnant' || finalLifeStage === 'lactating') {
+      recommendation += ' W ciąży i laktacji zapotrzebowanie zmienia się dynamicznie — skonsultuj dokładne dawkowanie z weterynarzem.';
+    }
+    if (rawMultiplier !== multiplier) {
+      recommendation += ' Skrajna kombinacja czynników została ograniczona do bezpiecznego zakresu.';
     }
     if (sportDiet) {
       recommendation += ` Zastosowano mnożnik z aktywnej diety sportowej „${sportDiet.name}” (x${sportDietFactor}).`;
@@ -286,9 +346,9 @@ async function calculate(req, res) {
       weight: finalWeight,
       ageMonths: finalAgeMonths,
       lifeStage: finalLifeStage,
-      activity,
-      bodyCondition,
-      goal,
+      activity: activityKey,
+      bodyCondition: bodyConditionKey,
+      goal: goalKey,
       isSterilized: !!isSterilized,
       breedFactor,
       macros,

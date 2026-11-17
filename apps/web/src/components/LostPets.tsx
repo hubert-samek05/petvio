@@ -2,10 +2,14 @@
 
 import { petApi, lostPetsApi } from '@/lib/api';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
+
+const LocationPicker = dynamic(() => import('@/components/LocationPicker'), { ssr: false });
 import {
   AlertTriangle,
   MapPin,
+  Navigation,
   Phone,
   Calendar,
   Search,
@@ -60,11 +64,6 @@ interface Pet {
   birth_date?: string;
   gender?: string;
 }
-
-const cities = [
-  'Warszawa', 'Kraków', 'Wrocław', 'Poznań', 'Gdańsk', 'Szczecin', 'Łódź', 'Katowice',
-  'Lublin', 'Białystok', 'Gdynia', 'Częstochowa', 'Radom', 'Toruń', 'Kielce', 'Inne'
-];
 
 const cityCoordinates: Record<string, { lat: number; lng: number }> = {
   'Warszawa': { lat: 52.2297, lng: 21.0122 },
@@ -163,7 +162,9 @@ const EMPTY_FORM = {
   gender: 'male' as 'male' | 'female',
   description: '',
   lastSeenLocation: '',
-  lastSeenCity: 'Warszawa',
+  lastSeenCity: '',
+  lastSeenLat: null as number | null,
+  lastSeenLng: null as number | null,
   lastSeenDate: new Date().toISOString().slice(0, 10),
   distinguishingFeatures: '',
   reward: '',
@@ -326,14 +327,45 @@ export default function LostPets() {
   const isOwner = (pet: LostPet) =>
     currentUser && String(currentUser.id ?? '') === pet.ownerId;
 
+  // Geokodowanie wsteczne (OpenStreetMap Nominatim) — wypelnia miejsce/miasto z pinezki
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=pl&zoom=16`
+      );
+      const j = await r.json();
+      const a = j.address || {};
+      const city = a.city || a.town || a.village || a.municipality || a.county || '';
+      const place =
+        (j.name && j.name !== city ? j.name : '') ||
+        [a.road, a.neighbourhood || a.suburb].filter(Boolean).join(', ') ||
+        (j.display_name || '').split(',')[0] ||
+        '';
+      return { city: String(city).slice(0, 100), place: String(place).slice(0, 255) };
+    } catch {
+      return null;
+    }
+  };
+
+  const pickLocation = async (loc: { lat: number; lng: number }) => {
+    setFormData((f) => ({ ...f, lastSeenLat: loc.lat, lastSeenLng: loc.lng }));
+    const g = await reverseGeocode(loc.lat, loc.lng);
+    if (g) {
+      setFormData((f) => ({
+        ...f,
+        lastSeenLat: loc.lat,
+        lastSeenLng: loc.lng,
+        lastSeenCity: g.city || f.lastSeenCity,
+        lastSeenLocation: g.place || f.lastSeenLocation,
+      }));
+    }
+  };
+
   const handleReportLost = async () => {
     if (!currentUser || !formData.petName.trim() || !formData.description.trim()) return;
     setSubmitting(true);
     setFormError('');
     try {
-      // GPS jako punkt ostatniego widzenia tylko gdy zgloszenie dotyczy miasta uzytkownika —
-      // inaczej srodek wybranego miasta (zgoda na lokalizacje != miejsce zaginiecia).
-      const useGps = userLocation && formData.lastSeenCity === userCity;
       const ageNum = parseInt(formData.age);
       const res = await lostPetsApi.create({
         petId: formData.petId || undefined,
@@ -346,9 +378,9 @@ export default function LostPets() {
         description: formData.description.trim(),
         distinguishingFeatures: formData.distinguishingFeatures || undefined,
         lastSeenLocation: formData.lastSeenLocation.trim(),
-        lastSeenCity: formData.lastSeenCity,
-        lastSeenLat: useGps ? userLocation!.lat : cityCoordinates[formData.lastSeenCity]?.lat,
-        lastSeenLng: useGps ? userLocation!.lng : cityCoordinates[formData.lastSeenCity]?.lng,
+        lastSeenCity: formData.lastSeenCity || undefined,
+        lastSeenLat: formData.lastSeenLat ?? undefined,
+        lastSeenLng: formData.lastSeenLng ?? undefined,
         lastSeenDate: formData.lastSeenDate,
         reward: formData.reward || undefined,
         ownerPhone: formData.phone || undefined,
@@ -426,7 +458,7 @@ export default function LostPets() {
   const stepValid = () => {
     if (step === 2) return formData.petName.trim().length > 0 && formData.color.trim().length > 0;
     if (step === 3) return formData.description.trim().length > 0;
-    if (step === 4) return formData.lastSeenLocation.trim().length > 0;
+    if (step === 4) return formData.lastSeenLocation.trim().length > 0 && formData.lastSeenLat != null;
     return true;
   };
 
@@ -438,6 +470,10 @@ export default function LostPets() {
         4: 'Podaj miejsce, gdzie widziano zwierzę ostatnim razem.',
       };
       setFormError(required[step] || 'Uzupełnij wymagane pole.');
+      return;
+    }
+    if (step === 4 && formData.lastSeenLat == null) {
+      setFormError('Zaznacz na mapie miejsce zaginięcia — dzięki temu powiadomimy osoby w okolicy.');
       return;
     }
     setFormError('');
@@ -558,7 +594,13 @@ export default function LostPets() {
       {/* Report Button */}
       <button
         onClick={() => {
-          setFormData({ ...EMPTY_FORM, lastSeenCity: userCity });
+          // Punkt startowy pinezki = aktualny GPS uzytkownika (mozna poprawic na mapie)
+          setFormData({
+            ...EMPTY_FORM,
+            lastSeenCity: userLocation ? '' : userCity,
+            lastSeenLat: userLocation?.lat ?? null,
+            lastSeenLng: userLocation?.lng ?? null,
+          });
           setStep(1);
           setFormError('');
           setShowReportModal(true);
@@ -606,7 +648,7 @@ export default function LostPets() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filteredPets.map((pet) => {
             const daysSince = getDaysSinceLost(pet.lastSeenDate);
             const isUrgent = pet.status === 'lost' && daysSince === 0;
@@ -616,92 +658,73 @@ export default function LostPets() {
             return (
               <div
                 key={pet.id}
-                className={`bg-white rounded-2xl border shadow-sm hover:shadow-xl transition-all overflow-hidden cursor-pointer ${
-                  isUrgent ? 'border-amber-300' : pet.status === 'found' ? 'border-emerald-200' : 'border-gray-200/70'
-                }`}
+                className="group bg-white rounded-2xl border border-gray-200/70 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all overflow-hidden cursor-pointer"
                 onClick={() => setSelectedPet(pet)}
               >
-                <div
-                  className={`h-1.5 ${
-                    isUrgent ? 'bg-amber-500' : pet.status === 'found' ? 'bg-emerald-500' : 'bg-gradient-to-r from-brand-dark to-brand'
-                  }`}
-                ></div>
-
-                <div className="p-5">
-                  <div className="flex gap-4">
-                    {pet.photo ? (
-                      <img
-                        src={pet.photo}
-                        alt={pet.petName}
-                        className="w-24 h-24 rounded-xl object-cover flex-shrink-0 border border-gray-200"
-                      />
-                    ) : (
-                      <div className="w-24 h-24 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center flex-shrink-0">
-                        <PawPrint className="w-10 h-10 text-gray-300" />
-                      </div>
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-2 gap-2">
-                        <div className="min-w-0">
-                          <h3 className="text-lg font-bold text-gray-900 truncate">{pet.petName}</h3>
-                          <p className="text-sm text-gray-500">
-                            {speciesLabel(pet.species)}
-                            {pet.breed ? ` • ${pet.breed}` : ''}
-                            {pet.color ? ` • ${pet.color}` : ''}
-                          </p>
-                        </div>
-                        {isUrgent && (
-                          <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold whitespace-nowrap">
-                            Pilne!
-                          </span>
-                        )}
-                        {pet.status === 'found' && (
-                          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold whitespace-nowrap">
-                            Odnalezione
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-sm text-gray-700 line-clamp-2 mb-3">{pet.description}</p>
-
-                      <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <MapPin className="w-4 h-4 text-brand-dark flex-shrink-0" />
-                          <span className="truncate">{pet.lastSeenLocation}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Calendar className="w-4 h-4 text-brand-dark flex-shrink-0" />
-                          <span>{getTimeAgo(pet.lastSeenDate)}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-100 gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="text-xs text-gray-500">
-                            {dist !== null ? `${dist.toFixed(0)} km stąd • ` : ''}
-                            {pet.status === 'lost'
-                              ? daysSince === 0
-                                ? 'Zaginęło dziś'
-                                : `${daysSince} dni temu`
-                              : pet.foundAt
-                                ? `Odnaleziono ${getTimeAgo(pet.foundAt)}`
-                                : 'Odnalezione'}
-                          </span>
-                        </div>
-                        {pet.reward && (
-                          <span className="px-3 py-1 rounded-lg bg-brand-light text-brand-dark text-xs font-semibold">
-                            Nagroda: {pet.reward}
-                          </span>
-                        )}
-                        {owner && (
-                          <span className="px-3 py-1 rounded-lg bg-brand-light text-brand-dark text-xs font-semibold">
-                            Twoje zgłoszenie
-                          </span>
-                        )}
-                      </div>
+                {/* Zdjęcie na całą szerokość z nakładkami */}
+                <div className="relative aspect-[16/10] bg-gradient-to-br from-gray-100 to-gray-200">
+                  {pet.photo ? (
+                    <img src={pet.photo} alt={pet.petName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <PawPrint className="w-16 h-16 text-gray-300" />
                     </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
+                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                    {isUrgent && (
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500 text-white text-xs font-bold shadow-lg animate-pulse">
+                        🚨 Pilne!
+                      </span>
+                    )}
+                    {pet.status === 'found' && (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500 text-white text-xs font-bold shadow-lg">
+                        ✓ Odnalezione
+                      </span>
+                    )}
+                    {pet.status === 'lost' && !isUrgent && (
+                      <span className="px-2.5 py-1 rounded-full bg-red-500/90 text-white text-xs font-bold shadow-lg">
+                        Zaginione
+                      </span>
+                    )}
+                  </div>
+                  {dist !== null && (
+                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur text-gray-800 text-xs font-bold shadow-lg">
+                      {dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(0)} km`} stąd
+                    </span>
+                  )}
+                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-bold text-white drop-shadow truncate">{pet.petName}</h3>
+                      <p className="text-xs text-white/90 drop-shadow">
+                        {speciesLabel(pet.species)}{pet.breed ? ` • ${pet.breed}` : ''}{pet.color ? ` • ${pet.color}` : ''}
+                      </p>
+                    </div>
+                    {pet.reward && (
+                      <span className="px-2.5 py-1 rounded-lg bg-brand-light/95 text-brand-dark text-xs font-bold shadow-lg whitespace-nowrap">
+                        💰 {pet.reward}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-1.5">
+                    <MapPin className="w-4 h-4 text-brand-dark flex-shrink-0" />
+                    <span className="truncate font-medium">{pet.lastSeenLocation}{pet.lastSeenCity ? `, ${pet.lastSeenCity}` : ''}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>
+                      {pet.status === 'lost'
+                        ? daysSince === 0 ? 'Zaginęło dziś' : `Zaginęło ${daysSince} dni temu`
+                        : pet.foundAt ? `Odnaleziono ${getTimeAgo(pet.foundAt)}` : 'Odnalezione'}
+                    </span>
+                    {owner && (
+                      <span className="ml-auto px-2 py-0.5 rounded-full bg-brand-light text-brand-dark font-semibold">
+                        Twoje zgłoszenie
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -939,36 +962,51 @@ export default function LostPets() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Miasto</label>
-                    <select
-                      value={formData.lastSeenCity}
-                      onChange={(e) => setFormData({ ...formData, lastSeenCity: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-                    >
-                      {cities.map((city) => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Miejsce zaginięcia na mapie</label>
+                      {userLocation && (
+                        <button
+                          type="button"
+                          onClick={() => pickLocation(userLocation)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-light text-brand-dark text-xs font-semibold hover:bg-brand/20 transition-all"
+                        >
+                          <Navigation className="w-3.5 h-3.5" /> Moja lokalizacja
+                        </button>
+                      )}
+                    </div>
+                    <LocationPicker
+                      value={formData.lastSeenLat != null ? { lat: formData.lastSeenLat, lng: formData.lastSeenLng! } : null}
+                      initialCenter={userLocation}
+                      onChange={pickLocation}
+                      className="h-56"
+                    />
+                    <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-brand-dark flex-shrink-0" />
+                      Kliknij na mapie lub przeciągnij pinezkę — adres uzupełni się sam. Alert trafi do użytkowników w promieniu 30 km od tego punktu.
+                    </p>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Ostatnio widziane miejsce</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Miejscowość</label>
+                      <input
+                        type="text"
+                        value={formData.lastSeenCity}
+                        onChange={(e) => setFormData({ ...formData, lastSeenCity: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                        placeholder="np. Warszawa"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">Dokładne miejsce</label>
                       <input
                         type="text"
                         value={formData.lastSeenLocation}
                         onChange={(e) => setFormData({ ...formData, lastSeenLocation: e.target.value })}
-                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm pl-10 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                        className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                         placeholder="np. Park Łazienkowski"
                       />
                     </div>
                   </div>
-                  {userLocation && formData.lastSeenCity === userCity && (
-                    <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-brand-dark" />
-                      Użyjemy Twojej aktualnej pozycji GPS jako punktu ostatniego widzenia.
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -1065,7 +1103,7 @@ export default function LostPets() {
                 ) : (
                   <button
                     onClick={handleReportLost}
-                    disabled={submitting || !formData.petName || !formData.description || !formData.color || !formData.lastSeenLocation}
+                    disabled={submitting || !formData.petName || !formData.description || !formData.color || !formData.lastSeenLocation || formData.lastSeenLat == null}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-50"
                   >
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -1164,6 +1202,14 @@ export default function LostPets() {
                       <div className="text-sm text-gray-500">{getTimeAgo(selectedPet.lastSeenDate)}</div>
                     </div>
                   </div>
+                  {selectedPet.lastSeenLat != null && selectedPet.lastSeenLng != null && (
+                    <LocationPicker
+                      value={{ lat: selectedPet.lastSeenLat, lng: selectedPet.lastSeenLng }}
+                      onChange={() => {}}
+                      readOnly
+                      className="h-44"
+                    />
+                  )}
                 </div>
               </div>
 

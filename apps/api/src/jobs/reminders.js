@@ -177,6 +177,25 @@ const sendDailyReminders = async () => {
     sent++;
   }
 
+  // 8) Zgłoszenia zaginięć: ostrzeżenie po 110 dniach, usunięcie po 120
+  const expiring = await query(
+    `SELECT id, user_id, pet_name FROM lost_pets
+      WHERE status = 'lost' AND created_at::date = CURRENT_DATE - INTERVAL '110 days'`
+  );
+  for (const lp of expiring.rows) {
+    await sendIfNew(
+      lp.user_id, 'lost_pet_expiring',
+      `Zgłoszenie „${lp.pet_name}" wygaśnie za 10 dni`,
+      'Starsze zgłoszenia są usuwane automatycznie. Jeśli pupil nadal jest poszukiwany, dodaj nowe zgłoszenie.',
+      '/dashboard/lost-pets'
+    );
+    sent++;
+  }
+  const purged = await query(
+    `DELETE FROM lost_pets WHERE created_at < NOW() - INTERVAL '120 days' RETURNING id`
+  );
+  if (purged.rowCount) console.log(`[reminders] usunięto ${purged.rowCount} starych zgłoszeń zaginięć`);
+
   if (sent) console.log(`[reminders] wysłano ${sent} przypomnień`);
 };
 

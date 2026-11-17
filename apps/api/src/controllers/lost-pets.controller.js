@@ -21,6 +21,8 @@ const MAX_TEXT = {
 };
 // Zdjecie jako data URL — twarde ograniczenie rozmiaru wiersza.
 const MAX_PHOTO_LEN = 600 * 1024;
+// Promien alertu push o zaginionym zwierzeciu (km od punktu ostatniego widzenia)
+const ALERT_RADIUS_KM = 30;
 
 const toStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : null);
 const isDateStr = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s).getTime());
@@ -164,23 +166,45 @@ const createLostPet = async (req, res) => {
       [result.rows[0].id]
     );
 
-    // Powiadom użytkowników z tego samego miasta — możliwe, że ktoś widział zwierzę
-    const city = toStr(req.body.lastSeenCity, MAX_TEXT.lastSeenCity);
-    if (city) {
-      const nearby = await query(
-        `SELECT id FROM users WHERE LOWER(TRIM(city)) = LOWER(TRIM($1)) AND id <> $2 LIMIT 300`,
-        [city, userId]
-      );
+    // Alert do użytkowników w promieniu ALERT_RADIUS_KM od punktu zaginięcia
+    // (last-known location zapisywana przy otwarciu apki). Fallback: dopasowanie miasta.
+    try {
       const { notify } = require('./notifications.controller');
       const me = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId]);
       const owner = [me.rows[0]?.first_name, me.rows[0]?.last_name].filter(Boolean).join(' ') || 'Ktoś';
-      for (const u of nearby.rows) {
-        notify(u.id, 'lost_pet_nearby',
-          `Zaginął ${petName} w Twojej okolicy`,
-          `${owner} szuka ${petName} — ostatnio widziany(a): ${lastSeenLocation}. Jeśli coś wiesz, zajrzyj do zgłoszenia.`,
-          '/dashboard/lost-pets'
+      const city = toStr(req.body.lastSeenCity, MAX_TEXT.lastSeenCity);
+      const body = `${owner} szuka ${petName} — ostatnio widziany(a): ${lastSeenLocation}. Jeśli coś wiesz, zajrzyj do zgłoszenia.`;
+
+      let nearby = { rows: [] };
+      const lat = lastSeenLat != null ? Number(lastSeenLat) : null;
+      const lng = lastSeenLng != null ? Number(lastSeenLng) : null;
+      if (lat !== null && lng !== null) {
+        nearby = await query(
+          `SELECT id FROM users u
+            WHERE u.id <> $3 AND u.lat IS NOT NULL AND u.lng IS NOT NULL
+              AND u.location_updated_at > NOW() - INTERVAL '180 days'
+              AND (6371 * acos(LEAST(1, GREATEST(-1,
+                    cos(radians($1)) * cos(radians(u.lat)) * cos(radians(u.lng) - radians($2)) +
+                    sin(radians($1)) * sin(radians(u.lat)))))) <= ${ALERT_RADIUS_KM}
+            LIMIT 500`,
+          [lat, lng, userId]
         );
       }
+      // Uzupełnienie: użytkownicy bez współrzędnych, ale z tego samego miasta
+      if (city) {
+        const byCity = await query(
+          `SELECT id FROM users WHERE LOWER(TRIM(city)) = LOWER(TRIM($1)) AND id <> $2
+             AND (lat IS NULL OR lng IS NULL) LIMIT 300`,
+          [city, userId]
+        );
+        const seen = new Set(nearby.rows.map((r) => r.id));
+        for (const r of byCity.rows) if (!seen.has(r.id)) nearby.rows.push(r);
+      }
+      for (const u of nearby.rows) {
+        notify(u.id, 'lost_pet_nearby', `Zaginął ${petName} w Twojej okolicy`, body, '/dashboard/lost-pets');
+      }
+    } catch (notifyErr) {
+      console.error('Lost pet notify error:', notifyErr);
     }
 
     res.status(201).json({ lostPet: created.rows[0] });
@@ -197,11 +221,36 @@ const setStatus = (status) => async (req, res) => {
     const result = await query(
       `UPDATE lost_pets SET status = $3, found_at = ${status === 'found' ? 'CURRENT_TIMESTAMP' : 'NULL'},
        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND user_id = $2 RETURNING id`,
+       WHERE id = $1 AND user_id = $2 RETURNING id, pet_name, last_seen_lat, last_seen_lng`,
       [id, req.user.userId, status]
     );
     if (result.rows.length === 0) {
       return sendError(res, 404, 'Zgłoszenie nie istnieje lub nie jest Twoje');
+    }
+    // Odnalezienie — dobra wiadomość dla osób, które dostały alert (ten sam promień)
+    if (status === 'found') {
+      const { pet_name, last_seen_lat, last_seen_lng } = result.rows[0];
+      if (last_seen_lat != null && last_seen_lng != null) {
+        try {
+          const { notify } = require('./notifications.controller');
+          const nearby = await query(
+            `SELECT id FROM users u
+              WHERE u.id <> $3 AND u.lat IS NOT NULL AND u.lng IS NOT NULL
+                AND u.location_updated_at > NOW() - INTERVAL '180 days'
+                AND (6371 * acos(LEAST(1, GREATEST(-1,
+                      cos(radians($1)) * cos(radians(u.lat)) * cos(radians(u.lng) - radians($2)) +
+                      sin(radians($1)) * sin(radians(u.lat)))))) <= ${ALERT_RADIUS_KM}
+              LIMIT 500`,
+            [Number(last_seen_lat), Number(last_seen_lng), req.user.userId]
+          );
+          for (const u of nearby.rows) {
+            notify(u.id, 'lost_pet_found', `${pet_name} wrócił do domu 🎉`,
+              `Zaginione zwierzę, którego szukano w Twojej okolicy, zostało odnalezione.`, '/dashboard/lost-pets');
+          }
+        } catch (notifyErr) {
+          console.error('Found notify error:', notifyErr);
+        }
+      }
     }
     res.json({ success: true });
   } catch (error) {

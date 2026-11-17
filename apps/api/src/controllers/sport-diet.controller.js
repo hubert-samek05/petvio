@@ -1,9 +1,17 @@
 const { query } = require('../config/database');
+const { petFrozen } = require('../utils/subscription');
 const { getActiveSportDietForPet } = require('../utils/sport-diet.utils');
+
+const isInt = (v) => Number.isInteger(Number(v));
+const bad = (res, message) => res.status(400).json({ error: { message, status: 400 } });
+const SUPPORTED_SPECIES = ['dog', 'cat'];
 
 const getTemplates = async (req, res) => {
   try {
     const { species } = req.query;
+    if (species !== undefined && !SUPPORTED_SPECIES.includes(species)) {
+      return bad(res, 'Diety sportowe są dostępne tylko dla psów i kotów');
+    }
     let sql = 'SELECT * FROM sport_diet_templates';
     const params = [];
     if (species) {
@@ -27,13 +35,15 @@ const getAssignments = async (req, res) => {
     const userId = req.user.userId;
     const { petId } = req.query;
 
+    if (petId !== undefined && !isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
+
     let sql = `SELECT psd.*, t.name as template_name, t.key as template_key, t.calorie_multiplier,
                       t.activity_level, t.meal_frequency, t.recommended_foods, t.avoid_foods, t.tips,
                       p.name as pet_name
                FROM pet_sport_diets psd
                JOIN sport_diet_templates t ON psd.template_id = t.id
                JOIN pets p ON psd.pet_id = p.id
-               WHERE psd.user_id = $1 AND psd.is_active = true`;
+               WHERE psd.user_id = $1 AND psd.is_active = true AND p.is_frozen = false`;
     const params = [userId];
 
     if (petId) {
@@ -58,10 +68,13 @@ const getAssignmentByPet = async (req, res) => {
     const userId = req.user.userId;
     const petId = req.params.petId;
 
-    const petCheck = await query('SELECT id FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
+    if (!isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
+
+    const petCheck = await query('SELECT id, is_frozen FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
     if (petCheck.rows.length === 0) {
       return res.status(404).json({ error: { message: 'Zwierzę nie zostało znalezione', status: 404 } });
     }
+    if (petCheck.rows[0].is_frozen) return petFrozen(res);
 
     const assignment = await getActiveSportDietForPet(petId);
     res.json({ assignment });
@@ -78,20 +91,25 @@ const assignDiet = async (req, res) => {
     const userId = req.user.userId;
     const { petId, templateId } = req.body;
 
-    if (!petId || !templateId) {
-      return res.status(400).json({
-        error: { message: 'Wymagane pola: petId, templateId', status: 400 },
-      });
+    if (!isInt(petId) || !isInt(templateId)) {
+      return bad(res, 'Nieprawidłowy identyfikator zwierzęcia lub szablonu');
     }
 
-    const petCheck = await query('SELECT id FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
+    const petCheck = await query('SELECT id, species, is_frozen FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
     if (petCheck.rows.length === 0) {
       return res.status(404).json({ error: { message: 'Zwierzę nie zostało znalezione', status: 404 } });
     }
+    if (petCheck.rows[0].is_frozen) return petFrozen(res);
 
-    const templateCheck = await query('SELECT id FROM sport_diet_templates WHERE id = $1', [templateId]);
+    const templateCheck = await query('SELECT id, species FROM sport_diet_templates WHERE id = $1', [templateId]);
     if (templateCheck.rows.length === 0) {
       return res.status(404).json({ error: { message: 'Szablon diety nie został znaleziony', status: 404 } });
+    }
+
+    if (templateCheck.rows[0].species !== petCheck.rows[0].species) {
+      return res.status(400).json({
+        error: { message: 'Ta dieta jest przeznaczona dla innego gatunku', status: 400 },
+      });
     }
 
     await query('UPDATE pet_sport_diets SET is_active = false WHERE pet_id = $1 AND is_active = true', [petId]);
@@ -119,6 +137,8 @@ const unassignDiet = async (req, res) => {
   try {
     const userId = req.user.userId;
     const petId = req.params.petId;
+
+    if (!isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
 
     const result = await query(
       `UPDATE pet_sport_diets SET is_active = false, updated_at = NOW()

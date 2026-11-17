@@ -1,4 +1,59 @@
 const { query } = require('../config/database');
+const { petFrozen } = require('../utils/subscription');
+
+const isInt = (v) => Number.isInteger(Number(v));
+const bad = (res, message) => res.status(400).json({ error: { message, status: 400 } });
+const RATIO_MODEL_KEYS = ['standard', 'adjusted', 'senior_light', 'custom'];
+
+// Wspólna walidacja parametrów kalkulacji / zapisu planu
+function validatePlanInput(body, { requirePetId = false } = {}) {
+  const errors = [];
+  const { petId, weightKg, activityLevel, ratioModel, customRatios, mealsPerDay, notes } = body;
+
+  if (requirePetId && !isInt(petId)) errors.push('Nieprawidłowy identyfikator zwierzęcia');
+
+  const w = Number(weightKg);
+  if (!isFinite(w) || w < 0.1 || w > 150) errors.push('Waga musi być liczbą z zakresu 0,1–150 kg');
+
+  const act = activityLevel || 'active';
+  if (!Object.keys(ACTIVITY_DAILY_PCT).includes(act)) errors.push('Nieprawidłowy poziom aktywności');
+
+  const model = ratioModel || 'standard';
+  if (!RATIO_MODEL_KEYS.includes(model)) errors.push('Nieprawidłowy model proporcji');
+
+  const meals = mealsPerDay === undefined || mealsPerDay === null || mealsPerDay === '' ? 2 : Number(mealsPerDay);
+  if (!Number.isInteger(meals) || meals < 1 || meals > 8) errors.push('Liczba posiłków musi być liczbą całkowitą 1–8');
+
+  let ratios = null;
+  if (model === 'custom') {
+    if (!customRatios || typeof customRatios !== 'object') {
+      errors.push('Dla modelu custom wymagane są proporcje customRatios');
+    } else {
+      const keys = ['musclePct', 'bonePct', 'liverPct', 'otherOrganPct', 'vegFruitPct'];
+      const vals = keys.map((k) => Number(customRatios[k]));
+      if (vals.some((v) => !isFinite(v) || v < 0 || v > 100)) {
+        errors.push('Własne proporcje muszą być liczbami z zakresu 0–100');
+      } else {
+        const sum = vals.reduce((a, b) => a + b, 0);
+        if (Math.abs(sum - 100) > 0.5) errors.push('Suma własnych proporcji musi wynosić 100%');
+        else ratios = Object.fromEntries(keys.map((k, i) => [k, vals[i]]));
+      }
+    }
+  }
+
+  if (typeof notes === 'string' && notes.length > 2000) errors.push('Notatki mogą mieć maksymalnie 2000 znaków');
+
+  return {
+    errors,
+    petId: isInt(petId) ? parseInt(petId, 10) : null,
+    weightKg: w,
+    activityLevel: act,
+    ratioModel: model,
+    customRatios: ratios,
+    mealsPerDay: meals,
+    notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+  };
+}
 
 const ACTIVITY_DAILY_PCT = {
   puppy: 5,
@@ -93,18 +148,24 @@ async function getSpecialDietWarning(petId) {
   return `Zwierzę ma aktywną dietę specjalistyczną „${diet.name}” (${label}) – przed wdrożeniem lub zmianą diety BARF skonsultuj się z weterynarzem, aby uniknąć konfliktu z zaleceniami dietetycznymi.`;
 }
 
+const SUPPLEMENT_UNITS = ['g', 'ml', 'łyżeczka', 'kapsułka', 'szczypta'];
+
 function parseSupplements(supplements) {
   if (!Array.isArray(supplements)) return [];
   return supplements
-    .filter((s) => s && s.name && s.name.trim())
-    .map((s) => ({
-      name: s.name.trim(),
-      amount: s.amount ? Number(s.amount) : null,
-      unit: s.unit || null,
-      source: s.source === 'database' ? 'database' : 'custom',
-      ingredientId: s.ingredientId || null,
-      notes: s.notes || null,
-    }));
+    .filter((s) => s && typeof s.name === 'string' && s.name.trim())
+    .slice(0, 20)
+    .map((s) => {
+      const amount = Number(s.amount);
+      return {
+        name: s.name.trim().slice(0, 100),
+        amount: isFinite(amount) && amount >= 0 && amount <= 10000 ? amount : null,
+        unit: SUPPLEMENT_UNITS.includes(s.unit) ? s.unit : 'g',
+        source: s.source === 'database' ? 'database' : 'custom',
+        ingredientId: isInt(s.ingredientId) ? parseInt(s.ingredientId, 10) : null,
+        notes: typeof s.notes === 'string' && s.notes.trim() ? s.notes.trim().slice(0, 500) : null,
+      };
+    });
 }
 
 const getIngredients = async (req, res) => {
@@ -154,39 +215,15 @@ const getIngredients = async (req, res) => {
 
 const previewCalculation = async (req, res) => {
   try {
-    const { weightKg, activityLevel, ratioModel, customRatios, mealsPerDay } = req.body;
-
-    if (!weightKg || weightKg <= 0) {
-      return res.status(400).json({
-        error: { message: 'Podaj prawidłową wagę zwierzęcia', status: 400 },
-      });
-    }
-
-    if (ratioModel === 'custom') {
-      if (!customRatios) {
-        return res.status(400).json({
-          error: { message: 'Dla modelu custom wymagane są proporcje customRatios', status: 400 },
-        });
-      }
-      const sum =
-        (customRatios.musclePct || 0) +
-        (customRatios.bonePct || 0) +
-        (customRatios.liverPct || 0) +
-        (customRatios.otherOrganPct || 0) +
-        (customRatios.vegFruitPct || 0);
-      if (Math.abs(sum - 100) > 0.5) {
-        return res.status(400).json({
-          error: { message: 'Suma własnych proporcji musi wynosić 100%', status: 400 },
-        });
-      }
-    }
+    const v = validatePlanInput(req.body);
+    if (v.errors.length > 0) return bad(res, v.errors[0]);
 
     const result = computePlan({
-      weightKg: Number(weightKg),
-      activityLevel: activityLevel || 'active',
-      ratioModel: ratioModel || 'standard',
-      customRatios,
-      mealsPerDay: mealsPerDay ? Number(mealsPerDay) : 2,
+      weightKg: v.weightKg,
+      activityLevel: v.activityLevel,
+      ratioModel: v.ratioModel,
+      customRatios: v.customRatios,
+      mealsPerDay: v.mealsPerDay,
     });
 
     res.json(result);
@@ -204,10 +241,12 @@ const getPlans = async (req, res) => {
     const userId = req.user.userId;
     const { petId } = req.query;
 
+    if (petId !== undefined && !isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
+
     let sql = `SELECT bp.*, p.name as pet_name, p.species as pet_species
                FROM barf_plans bp
                JOIN pets p ON bp.pet_id = p.id
-               WHERE bp.user_id = $1 AND bp.is_active = true`;
+               WHERE bp.user_id = $1 AND bp.is_active = true AND p.is_frozen = false`;
     const params = [userId];
 
     if (petId) {
@@ -232,10 +271,13 @@ const getPlanByPet = async (req, res) => {
     const userId = req.user.userId;
     const petId = req.params.petId;
 
-    const petCheck = await query('SELECT id FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
+    if (!isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
+
+    const petCheck = await query('SELECT id, is_frozen FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
     if (petCheck.rows.length === 0) {
       return res.status(404).json({ error: { message: 'Zwierzę nie zostało znalezione', status: 404 } });
     }
+    if (petCheck.rows[0].is_frozen) return petFrozen(res);
 
     const result = await query(
       `SELECT * FROM barf_plans WHERE pet_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`,
@@ -256,49 +298,26 @@ const getPlanByPet = async (req, res) => {
 const savePlan = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { petId, weightKg, activityLevel, ratioModel, customRatios, mealsPerDay, notes, supplements } = req.body;
+    const v = validatePlanInput(req.body, { requirePetId: true });
+    if (v.errors.length > 0) return bad(res, v.errors[0]);
 
-    if (!petId || !weightKg || weightKg <= 0) {
-      return res.status(400).json({
-        error: { message: 'Wymagane pola: petId, weightKg', status: 400 },
-      });
-    }
-
-    const petCheck = await query('SELECT id FROM pets WHERE id = $1 AND user_id = $2', [petId, userId]);
+    const petCheck = await query('SELECT id, is_frozen FROM pets WHERE id = $1 AND user_id = $2', [v.petId, userId]);
     if (petCheck.rows.length === 0) {
       return res.status(404).json({ error: { message: 'Zwierzę nie zostało znalezione', status: 404 } });
     }
-
-    if (ratioModel === 'custom') {
-      if (!customRatios) {
-        return res.status(400).json({
-          error: { message: 'Dla modelu custom wymagane są proporcje customRatios', status: 400 },
-        });
-      }
-      const sum =
-        (customRatios.musclePct || 0) +
-        (customRatios.bonePct || 0) +
-        (customRatios.liverPct || 0) +
-        (customRatios.otherOrganPct || 0) +
-        (customRatios.vegFruitPct || 0);
-      if (Math.abs(sum - 100) > 0.5) {
-        return res.status(400).json({
-          error: { message: 'Suma własnych proporcji musi wynosić 100%', status: 400 },
-        });
-      }
-    }
+    if (petCheck.rows[0].is_frozen) return petFrozen(res);
 
     const computed = computePlan({
-      weightKg: Number(weightKg),
-      activityLevel: activityLevel || 'active',
-      ratioModel: ratioModel || 'standard',
-      customRatios,
-      mealsPerDay: mealsPerDay ? Number(mealsPerDay) : 2,
+      weightKg: v.weightKg,
+      activityLevel: v.activityLevel,
+      ratioModel: v.ratioModel,
+      customRatios: v.customRatios,
+      mealsPerDay: v.mealsPerDay,
     });
 
-    await query('UPDATE barf_plans SET is_active = false WHERE pet_id = $1 AND is_active = true', [petId]);
+    await query('UPDATE barf_plans SET is_active = false WHERE pet_id = $1 AND is_active = true', [v.petId]);
 
-    const parsedSupplements = parseSupplements(supplements);
+    const parsedSupplements = parseSupplements(req.body.supplements);
 
     const result = await query(
       `INSERT INTO barf_plans
@@ -308,17 +327,17 @@ const savePlan = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, true, NOW(), NOW())
        RETURNING *`,
       [
-        petId,
+        v.petId,
         userId,
-        weightKg,
-        activityLevel || 'active',
-        ratioModel || 'standard',
+        v.weightKg,
+        v.activityLevel,
+        v.ratioModel,
         computed.musclePct,
         computed.bonePct,
         computed.liverPct,
         computed.otherOrganPct,
         computed.vegFruitPct,
-        mealsPerDay ? Number(mealsPerDay) : 2,
+        v.mealsPerDay,
         computed.dailyFoodGrams,
         computed.muscleMeatGrams,
         computed.boneGrams,
@@ -327,7 +346,7 @@ const savePlan = async (req, res) => {
         computed.vegFruitGrams,
         computed.caloriesTarget,
         JSON.stringify(parsedSupplements),
-        notes || null,
+        v.notes,
       ]
     );
 
@@ -347,6 +366,8 @@ const deletePlan = async (req, res) => {
   try {
     const userId = req.user.userId;
     const petId = req.params.petId;
+
+    if (!isInt(petId)) return bad(res, 'Nieprawidłowy identyfikator zwierzęcia');
 
     const result = await query(
       `UPDATE barf_plans SET is_active = false, updated_at = NOW()
