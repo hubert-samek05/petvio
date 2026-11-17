@@ -9,7 +9,7 @@ import PageHeader from '@/components/PageHeader';
 import { planBullets } from '@/components/UpgradeModal';
 import { formatPln, usePlan, type PlanCatalogItem, type UsageItem } from '@/lib/plan';
 import { subscriptionApi } from '@/lib/api';
-import { getIAPDebugInfo, getIAPOfferings, iapAvailable, initIAP, onCustomerInfoUpdate, purchaseIAPPackage, restoreIAPPurchases, type RcPackage } from '@/lib/iap';
+import { getIAPOfferings, iapAvailable, initIAP, onCustomerInfoUpdate, purchaseIAPPackage, restoreIAPPurchases, type RcPackage } from '@/lib/iap';
 
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
@@ -726,15 +726,6 @@ export default function SubscriptionPage() {
           );
         })}
       </div>
-
-      {/* DEBUG IAP — usunąć po weryfikacji */}
-      {isIOS && (
-        <p className="text-[10px] text-gray-300 text-center">
-          iap: {iapAvailable() ? 'plugin ok' : 'NO PLUGIN'} · oferty: {iapPackages === null ? 'ładuję' : iapPackages.length}
-          {iapPackages && iapPackages.length > 0 ? ` · ids: ${iapPackages.map((p) => p.product?.identifier || '?').join(', ')}` : ''}
-          {` · cfg:${getIAPDebugInfo().configured ? 1 : 0} err:${getIAPDebugInfo().lastError || '-'}`}
-        </p>
-      )}
 
       {/* Informacje wymagane przez App Store (3.1.2) — tylko na iOS */}
       {isIOS && iapAvailable() && (
