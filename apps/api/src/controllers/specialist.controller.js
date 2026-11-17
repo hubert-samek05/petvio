@@ -33,9 +33,19 @@ const getAll = async (req, res) => {
     const conditions = [`s.status = 'approved'`];
     const params = [];
 
-    if (type && VALID_TYPES.includes(type)) {
-      params.push(type);
-      conditions.push(`s.specialist_type = $${params.length}`);
+    if (type) {
+      // Lista po przecinku, np. type=behaviorist,trainer — tylko dozwolone wartosci
+      const types = String(type)
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => VALID_TYPES.includes(t));
+      if (types.length === 1) {
+        params.push(types[0]);
+        conditions.push(`s.specialist_type = $${params.length}`);
+      } else if (types.length > 1) {
+        params.push(types);
+        conditions.push(`s.specialist_type = ANY($${params.length})`);
+      }
     }
     if (species && VALID_SPECIES.includes(species)) {
       params.push(species);

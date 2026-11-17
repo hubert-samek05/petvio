@@ -54,6 +54,12 @@ const typeLabels: Record<string, string> = {
 
 const COMMUNITY_COLOR = '#7c3aed';
 
+// „Wszyscy" = tylko typy specjalistow (bez vet/hotel/petsitter) — lista dla API
+const ALL_SPEC_TYPES = 'behaviorist,trainer,zoopsychologist,dietitian,groomer';
+// Limity wydarzeniowe — tysiace markerow/kart zawieszały render i wyrzucało do menu
+const MAX_MAP_MARKERS = 400;
+const MAX_CARDS = 60;
+
 // Dozwolone tylko http(s) — zgłoszenia użytkowników nie mogą podawać javascript: itp.
 const safeWebsiteUrl = (url: string | null) => {
   if (!url) return null;
@@ -117,7 +123,7 @@ export default function FindSpecialist() {
     setLoading(true);
     try {
       const data = await specialistApi.getAll({
-        type: type || undefined,
+        type: type || ALL_SPEC_TYPES,
         species: species || undefined,
         search: searchQuery.trim() || undefined,
         lat: userLocation ? userLocation[0] : undefined,
@@ -216,9 +222,9 @@ export default function FindSpecialist() {
     setLocationState('idle');
   };
 
-  // Markery mapy — tylko rekordy ze współrzędnymi
+  // Markery mapy — tylko rekordy ze współrzędnymi, limit dla wydajności
   const withCoords = specialists.filter((s) => s.latitude != null && s.longitude != null);
-  const mapPlaces: MapPlace[] = withCoords.map((s) => ({
+  const mapPlaces: MapPlace[] = withCoords.slice(0, MAX_MAP_MARKERS).map((s) => ({
     id: String(s.id),
     name: s.name,
     lat: typeof s.latitude === 'string' ? parseFloat(s.latitude) : (s.latitude as number),
@@ -447,9 +453,10 @@ export default function FindSpecialist() {
               Znaleziono <span className="font-semibold text-gray-700">{specialists.length}</span>{' '}
               {specialists.length === 1 ? 'specjalistę' : 'specjalistów'}
               {userLocation ? ` w promieniu ${searchRadius} km` : ''}
+              {specialists.length > MAX_CARDS && ' — wyświetlam najbliższe, zawęź wyszukiwanie'}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-              {specialists.map((s) => {
+              {specialists.slice(0, MAX_CARDS).map((s) => {
                 const Icon = typeOptions.find((t) => t.value === s.specialist_type)?.icon || HeartHandshake;
                 const community = s.submitted_by != null;
                 return (
