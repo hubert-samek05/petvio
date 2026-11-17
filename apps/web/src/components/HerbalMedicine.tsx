@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { petApi, herbalAdvisorApi, userPreferencesApi } from '@/lib/api';
+import AiQuotaBar from '@/components/AiQuotaBar';
+import { useAiQuota } from '@/lib/plan';
 import {
   Leaf, Search, ChevronRight, X, Check, AlertTriangle,
   BookOpen, Heart, Trash2, Plus, Cat, Dog, Sparkles, Clock,
@@ -42,9 +44,11 @@ export default function HerbalMedicine() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatLoading]);
 
+  const aiQuota = useAiQuota();
+
   const sendChatMessage = async (text?: string) => {
     const content = (text ?? chatInput).trim();
-    if (!content || chatLoading) return;
+    if (!content || chatLoading || aiQuota.out) return;
     const nextMessages: ChatMessage[] = [...chatMessages, { role: 'user', content }];
     setChatMessages(nextMessages);
     setChatInput('');
@@ -61,6 +65,7 @@ export default function HerbalMedicine() {
       setChatError(e?.response?.data?.error?.message || 'Nie udało się połączyć z doradcą AI. Spróbuj ponownie.');
     }
     setChatLoading(false);
+    window.dispatchEvent(new Event('pv:plan-refresh'));
   };
 
   const resetChat = () => { setChatMessages([]); setChatError(''); };
@@ -435,16 +440,17 @@ export default function HerbalMedicine() {
             </div>
 
             <div className="p-3 border-t border-gray-100 flex-shrink-0">
+              <AiQuotaBar />
               <div className="flex gap-2">
                 <input
-                  type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                  type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={aiQuota.out}
                   onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
-                  placeholder="Napisz pytanie o zioła dla Twojego pupila…"
+                  placeholder={aiQuota.out ? 'Limit pytań na dziś wyczerpany' : 'Napisz pytanie o zioła dla Twojego pupila…'}
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand"
                 />
                 <button
                   onClick={() => sendChatMessage()}
-                  disabled={!chatInput.trim() || chatLoading}
+                  disabled={!chatInput.trim() || chatLoading || aiQuota.out}
                   className="w-10 h-10 rounded-xl bg-brand-dark text-white flex items-center justify-center flex-shrink-0 disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />

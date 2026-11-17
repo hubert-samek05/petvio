@@ -4,22 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { PawPrint, Loader2 } from 'lucide-react';
-import { isMobileContext } from '@/lib/platform';
 
-// Ekran powitalny — natywna appka + mobile web.
-// Na desktopie przekierowuje: zalogowany → /dashboard, niezalogowany → /login.
+// Ekran powitalny — widoczny na mobile i w webie.
+// Zalogowany → /dashboard. Gość → ekran z przyciskami Zaloguj/Zarejestruj.
 export default function WelcomePage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    if (localStorage.getItem('token')) {
       router.replace('/dashboard');
-      return;
-    }
-    if (!isMobileContext()) {
-      router.replace('/login');
       return;
     }
     setReady(true);
@@ -73,13 +67,19 @@ export default function WelcomePage() {
       {/* Przyciski */}
       <div className="px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2 space-y-3 w-full max-w-sm mx-auto">
         <button
-          onClick={() => router.push('/login')}
+          onClick={() => {
+            sessionStorage.setItem('pv_welcome_seen', '1');
+            router.push('/login');
+          }}
           className="w-full py-4 rounded-full bg-brand-dark text-white font-semibold text-base shadow-lg shadow-brand-dark/20 active:scale-[0.98] transition-transform"
         >
           Zaloguj się
         </button>
         <button
-          onClick={() => router.push('/register')}
+          onClick={() => {
+            sessionStorage.setItem('pv_welcome_seen', '1');
+            router.push('/register');
+          }}
           className="w-full py-4 rounded-full bg-white text-brand-dark font-semibold text-base border-2 border-brand-dark/15 active:scale-[0.98] transition-transform"
         >
           Zarejestruj się

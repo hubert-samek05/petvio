@@ -12,12 +12,15 @@ export default function AdminSpecialistsPage() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    loadSpecialists();
-  }, [filter]);
+    const t = setTimeout(loadSpecialists, 300);
+    return () => clearTimeout(t);
+  }, [filter, search]);
 
   const loadSpecialists = async () => {
     try {
-      const response = await api.get('/api/specialists/admin/pending');
+      const response = await api.get(
+        `/api/specialists/admin/pending?status=${filter}&search=${encodeURIComponent(search)}`
+      );
       const specialistsData = response.data?.specialists || [];
       setSpecialists(Array.isArray(specialistsData) ? specialistsData : []);
     } catch (error) {
@@ -42,7 +45,7 @@ export default function AdminSpecialistsPage() {
     if (!notes) return;
     
     try {
-      await api.put(`/api/specialists/${id}/reject`, { admin_notes: notes });
+      await api.put(`/api/specialists/${id}/reject`, { reason: notes });
       loadSpecialists();
     } catch (error) {
       console.error('Error rejecting specialist:', error);

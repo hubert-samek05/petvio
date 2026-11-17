@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { aiAssistantApi, petApi } from '@/lib/api';
+import AiQuotaBar from '@/components/AiQuotaBar';
+import { useAiQuota } from '@/lib/plan';
 import {
   Send,
   Sparkles,
@@ -91,6 +93,7 @@ export default function AiAssistant() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const aiQuota = useAiQuota();
   const [activeRole, setActiveRole] = useState('general');
   const [isTyping, setIsTyping] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -158,7 +161,7 @@ export default function AiAssistant() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || !activeConversation || isTyping) return;
+    if (!text || !activeConversation || isTyping || aiQuota.out) return;
 
     const userMessage: Message = {
       id: `${Date.now()}_u`,
@@ -230,6 +233,7 @@ export default function AiAssistant() {
     } finally {
       setIsTyping(false);
       inputRef.current?.focus();
+      window.dispatchEvent(new Event('pv:plan-refresh'));
     }
   };
 
@@ -515,6 +519,7 @@ export default function AiAssistant() {
 
               {/* Input */}
               <div className="p-3 md:p-4 border-t border-gray-100">
+                <AiQuotaBar />
                 <div className="flex gap-2">
                   <input
                     ref={inputRef}
@@ -523,12 +528,13 @@ export default function AiAssistant() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     maxLength={2000}
-                    placeholder={isTyping ? 'Asystent pisze…' : 'Napisz pytanie…'}
+                    placeholder={aiQuota.out ? 'Limit pytań na dziś wyczerpany' : isTyping ? 'Asystent pisze…' : 'Napisz pytanie…'}
+                    disabled={aiQuota.out}
                     className="flex-1 px-3 md:px-4 py-2.5 md:py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-brand-dark focus:ring-2 focus:ring-brand-dark/10 text-sm"
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!input.trim() || isTyping}
+                    disabled={!input.trim() || isTyping || aiQuota.out}
                     className="px-3 md:px-4 py-2.5 md:py-3 rounded-xl pv-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send className="w-4 h-4 md:w-5 md:h-5" />

@@ -23,6 +23,7 @@ import {
   Calendar,
   Inbox,
 } from 'lucide-react';
+import { usePlan } from '@/lib/plan';
 
 interface SharedUser {
   id: string;
@@ -104,6 +105,9 @@ export default function Sharing() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const { info: planInfo, openUpgrade } = usePlan();
+  const shareUsage = planInfo?.usage.shares;
+  const shareAtLimit = !!shareUsage && shareUsage.max !== null && shareUsage.used >= shareUsage.max;
   const [editingUser, setEditingUser] = useState<SharedUser | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -442,8 +446,29 @@ export default function Sharing() {
       )}
 
       {/* Invite Button */}
+      {shareUsage && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-brand-cream/70 border border-brand-light/60 px-4 py-3">
+          <p className="text-xs font-semibold text-gray-600">
+            Osoby w współdzieleniu: {shareUsage.used} z {shareUsage.max === null ? '∞' : shareUsage.max}
+            <span className="text-gray-400 font-medium"> · plan {planInfo?.planName}</span>
+          </p>
+          {shareAtLimit && (
+            <button
+              type="button"
+              onClick={() => openUpgrade({ code: 'SHARE_LIMIT', limit: shareUsage.max ?? undefined, plan: planInfo?.plan })}
+              className="text-[11px] font-bold text-brand-dark bg-white border border-brand-light rounded-full px-3 py-1.5 hover:bg-brand-mint transition-colors flex-shrink-0"
+            >
+              Zwiększ limit
+            </button>
+          )}
+        </div>
+      )}
       <button
         onClick={() => {
+          if (shareAtLimit) {
+            openUpgrade({ code: 'SHARE_LIMIT', limit: shareUsage?.max ?? undefined, plan: planInfo?.plan });
+            return;
+          }
           resetInviteForm();
           setShowInviteModal(true);
         }}

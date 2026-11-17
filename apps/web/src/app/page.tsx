@@ -8,13 +8,18 @@ export default function Home() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
+    setLoggedIn(!!localStorage.getItem('token'));
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Zalogowany → dashboard; gość → ekran powitalny /welcome
+  const authHref = () => (loggedIn ? '/dashboard' : '/welcome');
 
   const heroImages = [
     'https://t3.ftcdn.net/jpg/05/99/59/42/360_F_599594224_S3zcoRAsexBiPr7sgVBoi7BxubOznJ2n.jpg',
@@ -158,7 +163,7 @@ export default function Home() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
           <p className="text-xs md:text-sm text-brand-dark font-medium">
-            Dołącz do Petvio i zadbaj o zdrowie swojego pupila. <Link href="/register" className="underline font-semibold">Załóż darmowe konto</Link>
+            Dołącz do Petvio i zadbaj o zdrowie swojego pupila. <Link href={authHref()} className="underline font-semibold">Załóż darmowe konto</Link>
           </p>
         </div>
       </div>
@@ -184,13 +189,13 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-brand-dark transition-colors">
+            <Link href={authHref()} className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-brand-dark transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
               </svg>
               Zaloguj
             </Link>
-            <Link href="/register" className="px-5 py-2.5 bg-brand-dark text-white text-sm font-semibold rounded-full hover:bg-brand transition-colors">
+            <Link href={authHref()} className="px-5 py-2.5 bg-brand-dark text-white text-sm font-semibold rounded-full hover:bg-brand transition-colors">
               Wypróbuj za darmo
             </Link>
           </div>
@@ -449,8 +454,8 @@ export default function Home() {
           </div>
 
           <div className="text-center mt-16">
-            <Link 
-              href="/register"
+            <Link
+              href={authHref()}
               className="inline-block px-8 py-4 bg-brand-dark text-white rounded-full hover:bg-brand transition-colors duration-300 font-semibold"
             >
               Rozpocznij teraz
@@ -564,8 +569,8 @@ export default function Home() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link 
-              href="/register"
+            <Link
+              href={authHref()}
               className="px-10 py-4 bg-white text-brand-dark rounded-full font-semibold hover:bg-brand-cream transition-all duration-300 shadow-xl hover:-translate-y-1"
             >
               Załóż darmowe konto
@@ -627,8 +632,8 @@ export default function Home() {
             <div>
               <h4 className="font-semibold text-gray-900 text-sm mb-4">Konto</h4>
               <ul className="space-y-2.5 text-sm text-gray-500">
-                <li><Link href="/login" className="hover:text-brand-dark transition-colors">Zaloguj się</Link></li>
-                <li><Link href="/register" className="hover:text-brand-dark transition-colors">Załóż konto</Link></li>
+                <li><Link href={authHref()} className="hover:text-brand-dark transition-colors">Zaloguj się</Link></li>
+                <li><Link href={authHref()} className="hover:text-brand-dark transition-colors">Załóż konto</Link></li>
               </ul>
             </div>
           </div>

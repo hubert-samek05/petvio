@@ -5,8 +5,8 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import ComingSoonModal from '@/components/ComingSoonModal';
+import { usePlan } from '@/lib/plan';
 import { unregisterPush } from '@/lib/push';
-import { isMobileContext } from '@/lib/platform';
 import {
   LayoutDashboard,
   PawPrint,
@@ -44,6 +44,8 @@ import {
   Sparkles,
   PlusCircle,
   Search,
+  Crown,
+  Lock,
 } from 'lucide-react';
 
 export type MenuItem = {
@@ -52,6 +54,7 @@ export type MenuItem = {
   icon: React.ElementType;
   color?: string;
   soon?: boolean;
+  premium?: string;
 };
 
 type Group = { label: string; items: MenuItem[] };
@@ -65,13 +68,14 @@ const GROUPS: Group[] = [
       { href: '/dashboard/shop', label: 'Sklep', icon: ShoppingBag },
       { href: '/dashboard/calendar', label: 'Kalendarz', icon: Calendar },
       { href: '/dashboard/pets/new', label: 'Dodaj zwierzę', icon: PlusCircle },
+      { href: '/dashboard/subscription', label: 'Subskrypcja', icon: Crown },
     ],
   },
   {
     label: 'Zdrowie',
     items: [
       { href: '/dashboard/health', label: 'Książeczka zdrowia', icon: Heart },
-      { href: '/dashboard/blood-analysis', label: 'Analiza krwi', icon: Droplets },
+      { href: '/dashboard/blood-analysis', label: 'Analiza krwi', icon: Droplets, premium: 'blood' },
       { href: '/dashboard/first-aid', label: 'Pierwsza pomoc', icon: AlertTriangle },
       { href: '/dashboard/herbal-medicine', label: 'Zioła', icon: Leaf },
     ],
@@ -85,7 +89,7 @@ const GROUPS: Group[] = [
       { href: '/dashboard/special-diets', label: 'Diety specjalne', icon: Apple },
       { href: '/dashboard/sport-diets', label: 'Diety sportowe', icon: Dumbbell },
       { href: '/dashboard/recipes', label: 'Przepisy', icon: ChefHat },
-      { href: '/dashboard/barf', label: 'BARF', icon: Beef },
+      { href: '/dashboard/barf', label: 'BARF', icon: Beef, premium: 'barf' },
     ],
   },
   {
@@ -123,7 +127,7 @@ const GROUPS: Group[] = [
       { href: '/dashboard/messages', label: 'Messenger', icon: MessagesSquare },
       { href: '/dashboard/groups', label: 'Grupy', icon: Users },
       { href: '/dashboard/forum', label: 'Forum', icon: MessageSquare },
-      { href: '/dashboard/breeding', label: 'Rozród', icon: Baby },
+      { href: '/dashboard/breeding', label: 'Rozród', icon: Baby, premium: 'breeding' },
       { href: '/dashboard/profile', label: 'Profil', icon: User },
     ],
   },
@@ -134,6 +138,7 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
   const [user, setUser] = useState<any>(null);
   const [query, setQuery] = useState('');
   const [soonOpen, setSoonOpen] = useState(false);
+  const { info, openUpgrade } = usePlan();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -165,7 +170,7 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
     await unregisterPush();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push(isMobileContext() ? '/welcome' : '/login');
+    router.push('/welcome');
   };
 
   const q = query.trim().toLowerCase();
@@ -251,6 +256,28 @@ export default function MobileMenu({ onOpen }: { onOpen?: (open: boolean) => voi
                           <Icon className="w-[18px] h-[18px]" />
                         </div>
                         <span className="pv-tile-label !text-[11px] !text-gray-400">{item.label}</span>
+                      </button>
+                    );
+                  }
+                  if (item.premium && info && info.features?.[item.premium]?.unlocked === false) {
+                    return (
+                      <button
+                        key={item.label + item.href}
+                        type="button"
+                        onClick={() => {
+                          handleClose();
+                          openUpgrade({ code: 'PREMIUM_FEATURE', feature: item.premium });
+                        }}
+                        className={`pv-tile animate-scale-in ${delay} !min-h-[92px]`}
+                      >
+                        <span className="absolute top-2 right-2 inline-flex items-center gap-0.5 px-1.5 h-4 rounded-full bg-brand-peach text-brand-dark text-[8px] font-bold uppercase tracking-wide">
+                          <Lock className="w-2 h-2" />
+                          PRO
+                        </span>
+                        <div className="pv-tile-icon !w-10 !h-10 bg-gray-100 text-gray-400">
+                          <Icon className="w-[18px] h-[18px]" />
+                        </div>
+                        <span className="pv-tile-label !text-[11px]">{item.label}</span>
                       </button>
                     );
                   }

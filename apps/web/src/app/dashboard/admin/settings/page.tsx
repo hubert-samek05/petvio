@@ -3,6 +3,7 @@ import PageHeader from '@/components/PageHeader';
 
 import { useEffect, useState } from 'react';
 import { Settings, Save, Bell, Shield, Palette, Globe } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState({
@@ -14,9 +15,32 @@ export default function AdminSettingsPage() {
     defaultLanguage: 'pl',
   });
 
-  const handleSave = () => {
-    // TODO: Save settings to API
-    console.log('Saving settings:', settings);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/admin/settings');
+        if (res.data?.settings) setSettings((s) => ({ ...s, ...res.data.settings }));
+      } catch (e) {
+        console.error('Error loading settings:', e);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setSaved(false);
+      await api.put('/api/admin/settings', settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      console.error('Error saving settings:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -174,6 +198,18 @@ export default function AdminSettingsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-brand-dark text-white font-medium hover:bg-brand transition-colors disabled:opacity-50"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? 'Zapisywanie...' : 'Zapisz ustawienia'}
+        </button>
+        {saved && <span className="text-sm text-brand-dark font-medium">Zapisano ✓</span>}
       </div>
     </div>
   );

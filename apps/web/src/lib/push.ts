@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { notificationsApi } from './api';
 
 // Minimalne typy pluginu — używamy Capacitor.Plugins zamiast importu JS paczki
@@ -10,9 +10,13 @@ type MessagingPlugin = {
   addListener(event: string, cb: (e: Record<string, unknown>) => void): void;
 };
 
+// Strona jest ładowana zdalnie, więc proxy natywnego pluginu rejestrujemy sami (registerPlugin),
+// a obecność pluginu w binarce sprawdzamy przez isPluginAvailable (starsze wersje appki go nie mają).
+let messagingProxy: MessagingPlugin | null = null;
 const getMessaging = (): MessagingPlugin | null => {
-  const plugins = (Capacitor as unknown as { Plugins?: Record<string, MessagingPlugin> }).Plugins;
-  return plugins?.FirebaseMessaging ?? null;
+  if (!Capacitor.isPluginAvailable('FirebaseMessaging')) return null;
+  if (!messagingProxy) messagingProxy = registerPlugin<MessagingPlugin>('FirebaseMessaging');
+  return messagingProxy;
 };
 
 // Inicjalizacja push (tylko natywna appka Capacitor; w przeglądarce no-op).

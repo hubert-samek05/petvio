@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useRef } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { MAP_STYLE_URL, add3dBuildings } from '@/lib/map';
 
 export type MapPoint = { lat: number; lng: number; timestamp?: number };
 
@@ -18,99 +18,157 @@ type WalkMapProps = {
   className?: string;
 };
 
-const DEFAULT_CENTER: [number, number] = [52.2297, 21.0122]; // Warszawa
+const DEFAULT_CENTER: [number, number] = [19.0, 52.0]; // Polska
 
-function startIcon() {
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:#1B6B4A;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  });
-}
+const el = (html: string) => {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d;
+};
 
-function endIcon() {
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:16px;height:16px;border-radius:4px;background:#0F3D2E;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transform:rotate(45deg)"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  });
-}
+const startHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#1B6B4A;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`;
+const endHtml = `<div style="width:16px;height:16px;border-radius:4px;background:#0F3D2E;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transform:rotate(45deg)"></div>`;
+const currentHtml = `
+  <div style="position:relative;width:22px;height:22px">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(27,107,74,.25);animation:pv-walk-ping 1.6s ease-out infinite"></div>
+    <div style="position:absolute;inset:5px;border-radius:50%;background:#1B6B4A;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)"></div>
+    <style>@keyframes pv-walk-ping{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
+  </div>`;
 
-function currentIcon() {
-  return L.divIcon({
-    className: '',
-    html: `
-      <div style="position:relative;width:22px;height:22px">
-        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(27,107,74,.25);animation:pv-walk-ping 1.6s ease-out infinite"></div>
-        <div style="position:absolute;inset:5px;border-radius:50%;background:#1B6B4A;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)"></div>
-        <style>@keyframes pv-walk-ping{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
-      </div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-  });
-}
+const EMPTY_LINE: GeoJSON.Feature = {
+  type: 'Feature',
+  properties: {},
+  geometry: { type: 'LineString', coordinates: [] },
+};
 
-/** Dopasowuje widok mapy do trasy / pozycji. */
-function FitBounds({ points, current, following }: { points: MapPoint[]; current?: { lat: number; lng: number } | null; following?: boolean }) {
-  const map = useMap();
+export default function WalkMap({ points, current, following = false, className = '' }: WalkMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const loaded = useRef(false);
+  const startRef = useRef<maplibregl.Marker | null>(null);
+  const endRef = useRef<maplibregl.Marker | null>(null);
+  const curRef = useRef<maplibregl.Marker | null>(null);
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const followingRef = useRef(following);
+  followingRef.current = following;
 
+  const syncRoute = () => {
+    const map = mapRef.current;
+    if (!map || !loaded.current) return;
+    const p = pointsRef.current;
+    const src = map.getSource('route') as maplibregl.GeoJSONSource | undefined;
+    src?.setData({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: p.map((x) => [x.lng, x.lat]) },
+    });
+    if (p.length >= 1) {
+      if (!startRef.current)
+        startRef.current = new maplibregl.Marker({ element: el(startHtml) }).addTo(map);
+      startRef.current.setLngLat([p[0].lng, p[0].lat]);
+    } else {
+      startRef.current?.remove();
+      startRef.current = null;
+    }
+    if (p.length >= 2) {
+      if (!endRef.current)
+        endRef.current = new maplibregl.Marker({ element: el(endHtml) }).addTo(map);
+      endRef.current.setLngLat([p[p.length - 1].lng, p[p.length - 1].lat]);
+    } else {
+      endRef.current?.remove();
+      endRef.current = null;
+    }
+  };
+
+  // Inicjalizacja mapy (raz)
   useEffect(() => {
+    if (!containerRef.current) return;
+    const p0 = pointsRef.current;
+    const c0 = currentRef.current;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: MAP_STYLE_URL,
+      center: c0 ? [c0.lng, c0.lat] : p0.length ? [p0[0].lng, p0[0].lat] : DEFAULT_CENTER,
+      zoom: p0.length || c0 ? 16 : 12,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.on('load', () => {
+      loaded.current = true;
+      add3dBuildings(map);
+      map.addSource('route', { type: 'geojson', data: EMPTY_LINE });
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#1B6B4A', 'line-width': 5, 'line-opacity': 0.85 },
+      });
+      syncRoute();
+    });
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      loaded.current = false;
+      startRef.current = endRef.current = curRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Trasa — sync przy zmianie punktow
+  useEffect(syncRoute, [points]);
+
+  // Kropka aktualnej pozycji
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!current) {
+      curRef.current?.remove();
+      curRef.current = null;
+      return;
+    }
+    if (!curRef.current) {
+      curRef.current = new maplibregl.Marker({ element: el(currentHtml) })
+        .setLngLat([current.lng, current.lat])
+        .addTo(map);
+    } else {
+      curRef.current.setLngLat([current.lng, current.lat]);
+    }
+  }, [current]);
+
+  // Widok: dopasowanie do trasy / podazanie za pozycja
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded.current) return;
     if (points.length >= 2) {
-      const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
-      map.fitBounds(bounds, { padding: [40, 40], animate: !following, maxZoom: 17 });
+      const lngs = points.map((p) => p.lng);
+      const lats = points.map((p) => p.lat);
+      map.fitBounds(
+        [
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)],
+        ],
+        { padding: 40, duration: following ? 0 : 600, maxZoom: 17 }
+      );
       return;
     }
     if (points.length === 1) {
-      map.setView([points[0].lat, points[0].lng], 16);
+      map.jumpTo({ center: [points[0].lng, points[0].lat], zoom: 16 });
       return;
     }
     if (current) {
-      if (following) map.setView([current.lat, current.lng]);
-      else map.setView([current.lat, current.lng], 16);
+      if (following) map.easeTo({ center: [current.lng, current.lat] });
+      else map.jumpTo({ center: [current.lng, current.lat], zoom: 16 });
     }
-  }, [points, current, following, map]);
-
-  return null;
-}
-
-export default function WalkMap({ points, current, following = false, className = '' }: WalkMapProps) {
-  const route = points.map((p) => [p.lat, p.lng] as [number, number]);
-  const center: [number, number] = current
-    ? [current.lat, current.lng]
-    : points.length > 0
-    ? [points[0].lat, points[0].lng]
-    : DEFAULT_CENTER;
+  }, [points, current, following]);
 
   return (
     <div className={`relative ${className}`}>
-      <MapContainer
-        center={center}
-        zoom={points.length > 0 || current ? 16 : 12}
-        scrollWheelZoom={false}
-        className="w-full h-full z-0"
-        style={{ minHeight: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
-        <FitBounds points={points} current={current} following={following} />
-        {route.length >= 2 && (
-          <Polyline positions={route} pathOptions={{ color: '#1B6B4A', weight: 5, opacity: 0.85, lineCap: 'round' }} />
-        )}
-        {route.length >= 1 && <Marker position={route[0]} icon={startIcon()} />}
-        {route.length >= 2 && <Marker position={route[route.length - 1]} icon={endIcon()} />}
-        {current && <Marker position={[current.lat, current.lng]} icon={currentIcon()} />}
-        {current && (
-          <CircleMarker
-            center={[current.lat, current.lng]}
-            radius={8}
-            pathOptions={{ color: '#1B6B4A', weight: 0, fillOpacity: 0 }}
-          />
-        )}
-      </MapContainer>
+      <div ref={containerRef} className="w-full h-full rounded-2xl overflow-hidden" />
     </div>
   );
 }

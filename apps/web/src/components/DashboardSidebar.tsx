@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import ComingSoonModal from '@/components/ComingSoonModal';
 import { unregisterPush } from '@/lib/push';
-import { isMobileContext } from '@/lib/platform';
+import { usePlan } from '@/lib/plan';
 import {
   LayoutDashboard,
   PawPrint,
@@ -41,10 +41,12 @@ import {
   BarChart3,
   User,
   LogOut,
+  Crown,
+  Lock,
   type LucideIcon,
 } from 'lucide-react';
 
-type NavItem = { href: string; label: string; icon: LucideIcon; tint: string; soon?: boolean };
+type NavItem = { href: string; label: string; icon: LucideIcon; tint: string; soon?: boolean; premium?: string };
 
 /* Miękkie, przyjazne tła ikon — wszystkie w rodzinie kolorystycznej marki */
 const T = {
@@ -60,6 +62,7 @@ export default function DashboardSidebar() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [soonOpen, setSoonOpen] = useState(false);
+  const { info, openUpgrade } = usePlan();
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -74,7 +77,7 @@ export default function DashboardSidebar() {
     await unregisterPush();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push(isMobileContext() ? '/welcome' : '/login');
+    router.push('/welcome');
   };
 
   const navGroups: { label: string | null; items: NavItem[] }[] = [
@@ -84,6 +87,7 @@ export default function DashboardSidebar() {
         { href: '/dashboard', label: 'Panel główny', icon: LayoutDashboard, tint: T.forest },
         { href: '/dashboard/pets', label: 'Moje zwierzęta', icon: PawPrint, tint: T.peach },
         { href: '/dashboard/shop', label: 'Sklep', icon: ShoppingBag, tint: T.green },
+        { href: '/dashboard/subscription', label: 'Subskrypcja', icon: Crown, tint: T.peach },
       ],
     },
     {
@@ -91,7 +95,7 @@ export default function DashboardSidebar() {
       items: [
         { href: '/dashboard/health', label: 'Książeczka zdrowia', icon: Heart, tint: T.mint },
         { href: '/dashboard/calendar', label: 'Kalendarz', icon: Calendar, tint: T.light },
-        { href: '/dashboard/blood-analysis', label: 'Analiza badań krwi', icon: Droplets, tint: T.mint },
+        { href: '/dashboard/blood-analysis', label: 'Analiza badań krwi', icon: Droplets, tint: T.mint, premium: 'blood' },
         { href: '/dashboard/first-aid', label: 'Pierwsza pomoc', icon: AlertTriangle, tint: T.peach },
         { href: '/dashboard/herbal-medicine', label: 'Ziołolecznictwo', icon: Leaf, tint: T.light },
       ],
@@ -105,7 +109,7 @@ export default function DashboardSidebar() {
         { href: '/dashboard/special-diets', label: 'Diety specjalistyczne', icon: Apple, tint: T.light },
         { href: '/dashboard/sport-diets', label: 'Dietetyka sportowa', icon: Dumbbell, tint: T.mint },
         { href: '/dashboard/recipes', label: 'Przepisy', icon: ChefHat, tint: T.peach },
-        { href: '/dashboard/barf', label: 'Baza BARF', icon: Beef, tint: T.light },
+        { href: '/dashboard/barf', label: 'Baza BARF', icon: Beef, tint: T.light, premium: 'barf' },
       ],
     },
     {
@@ -143,7 +147,7 @@ export default function DashboardSidebar() {
         { href: '/dashboard/messages', label: 'Messenger', icon: MessagesSquare, tint: T.mint },
         { href: '/dashboard/groups', label: 'Grupy', icon: Users, tint: T.peach },
         { href: '/dashboard/forum', label: 'Forum', icon: MessageSquare, tint: T.mint },
-        { href: '/dashboard/breeding', label: 'Rozród', icon: Baby, tint: T.peach },
+        { href: '/dashboard/breeding', label: 'Rozród', icon: Baby, tint: T.peach, premium: 'breeding' },
         { href: '/dashboard/profile', label: 'Profil', icon: User, tint: T.light },
       ],
     },
@@ -196,6 +200,25 @@ export default function DashboardSidebar() {
                   </button>
                 );
               }
+              if (item.premium && info && info.features?.[item.premium]?.unlocked === false) {
+                return (
+                  <button
+                    key={item.href}
+                    type="button"
+                    onClick={() => openUpgrade({ code: 'PREMIUM_FEATURE', feature: item.premium })}
+                    className="group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium text-gray-500 hover:bg-brand-peach/40 hover:text-brand-dark transition-all duration-200"
+                  >
+                    <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-400 group-hover:bg-brand-peach group-hover:text-brand-dark transition-all">
+                      <Icon className="w-[17px] h-[17px]" />
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                    <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-peach text-brand-dark text-[9px] font-bold uppercase tracking-wide flex-shrink-0">
+                      <Lock className="w-2.5 h-2.5" />
+                      Premium
+                    </span>
+                  </button>
+                );
+              }
               return (
                 <Link
                   key={item.href}
@@ -227,6 +250,28 @@ export default function DashboardSidebar() {
 
       {/* Stopka z użytkownikiem */}
       <div className="px-4 py-5 border-t border-gray-100/80">
+        {info && (
+          <Link
+            href="/dashboard/subscription"
+            className="flex items-center gap-2.5 px-3 py-2.5 mb-3 rounded-2xl bg-brand-cream border border-brand-light/60 hover:border-brand-light transition-colors"
+          >
+            <span className="w-8 h-8 rounded-xl bg-brand-peach flex items-center justify-center flex-shrink-0">
+              <Crown className="w-4 h-4 text-brand-dark" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-bold text-gray-800 truncate">{info.planName}</span>
+              <span className="block text-[11px] text-gray-400 truncate">
+                {info.isAdmin
+                  ? 'Konto administratora'
+                  : info.isTrial
+                  ? 'Okres próbny'
+                  : info.plan === 'mini'
+                  ? 'Ulepsz plan'
+                  : 'Aktywny plan'}
+              </span>
+            </span>
+          </Link>
+        )}
         <div className="flex items-center gap-3 px-2 py-2 mb-2">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-md"

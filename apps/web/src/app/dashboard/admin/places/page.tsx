@@ -12,12 +12,15 @@ export default function AdminPlacesPage() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    loadPlaces();
-  }, [filter]);
+    const t = setTimeout(loadPlaces, 300);
+    return () => clearTimeout(t);
+  }, [filter, search]);
 
   const loadPlaces = async () => {
     try {
-      const response = await api.get('/api/admin/places');
+      const response = await api.get(
+        `/api/admin/places?status=${filter}&search=${encodeURIComponent(search)}`
+      );
       const placesData = response.data?.places || [];
       setPlaces(Array.isArray(placesData) ? placesData : []);
     } catch (error) {
@@ -28,21 +31,21 @@ export default function AdminPlacesPage() {
     }
   };
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: string) => {
     try {
-      await api.put(`/api/places/${id}/approve`);
+      await api.put(`/api/admin/places/${id}/approve`);
       loadPlaces();
     } catch (error) {
       console.error('Error approving place:', error);
     }
   };
 
-  const handleReject = async (id: number) => {
+  const handleReject = async (id: string) => {
     const notes = prompt('Podaj powód odrzucenia:');
     if (!notes) return;
     
     try {
-      await api.put(`/api/places/${id}/reject`, { admin_notes: notes });
+      await api.put(`/api/admin/places/${id}/reject`, { admin_notes: notes });
       loadPlaces();
     } catch (error) {
       console.error('Error rejecting place:', error);
@@ -122,15 +125,19 @@ export default function AdminPlacesPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-                  {place.first_name} {place.last_name}
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-                  {place.email}
-                </span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mb-4">
+                {place.address && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                    {place.address}
+                  </span>
+                )}
+                {place.phone && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                    {place.phone}
+                  </span>
+                )}
               </div>
 
               {place.status === 'pending' && (

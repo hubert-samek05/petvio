@@ -2,12 +2,13 @@
 import PageHeader from '@/components/PageHeader';
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Eye, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 export default function AdminForumPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewPost, setViewPost] = useState<any>(null);
 
   useEffect(() => {
     loadPosts();
@@ -91,7 +92,7 @@ export default function AdminForumPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {/* TODO: View post */}}
+                          onClick={() => setViewPost(post)}
                           className="p-2 text-gray-400 hover:text-brand-dark hover:bg-brand-mint rounded-lg transition-colors"
                         >
                           <Eye className="w-4 h-4" />
@@ -111,6 +112,37 @@ export default function AdminForumPage() {
           </table>
         </div>
       </div>
+
+      {viewPost && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setViewPost(null)}>
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold truncate pr-4">{viewPost.title}</h2>
+              <button onClick={() => setViewPost(null)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4 text-sm text-gray-500">
+                <span>{viewPost.first_name} {viewPost.last_name}</span>
+                <span>•</span>
+                <span>{viewPost.email}</span>
+                <span>•</span>
+                <span>{new Date(viewPost.created_at).toLocaleString('pl-PL')}</span>
+              </div>
+              <div className="prose max-w-none whitespace-pre-wrap text-gray-800">{viewPost.content}</div>
+              <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={() => { setViewPost(null); handleDelete(viewPost.id); }}
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                >
+                  Usuń post
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

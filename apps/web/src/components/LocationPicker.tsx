@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { MAP_STYLE_URL, add3dBuildings } from '@/lib/map';
 
 export type PickedLocation = { lat: number; lng: number };
 
@@ -17,41 +17,18 @@ type LocationPickerProps = {
   className?: string;
 };
 
-const DEFAULT_CENTER: [number, number] = [52.0, 19.0]; // Polska
+const DEFAULT_CENTER: [number, number] = [19.0, 52.0]; // Polska (lng, lat)
 
-function pawIcon(color = '#d97706') {
-  return L.divIcon({
-    className: '',
-    html: `
-      <div style="position:relative;width:34px;height:34px;transform:translateY(-4px)">
-        <div style="position:absolute;inset:0;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)"></div>
-        <div style="position:absolute;left:50%;top:38%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#fff"></div>
-      </div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 30],
-  });
-}
-
-function ClickHandler({ onPick, disabled }: { onPick: (l: PickedLocation) => void; disabled?: boolean }) {
-  useMapEvents({
-    click(e) {
-      if (!disabled) onPick({ lat: e.latlng.lat, lng: e.latlng.lng });
-    },
-  });
-  return null;
-}
-
-/** Dopasowuje widok gdy zmieni sie poczatkowy srodek (np. przyszedl GPS). */
-function Recenter({ center }: { center?: PickedLocation | null }) {
-  const map = useMap();
-  const done = useRef(false);
-  useEffect(() => {
-    if (center && !done.current) {
-      done.current = true;
-      map.setView([center.lat, center.lng], 15);
-    }
-  }, [center, map]);
-  return null;
+function pinElement(color = '#d97706') {
+  const el = document.createElement('div');
+  el.style.width = '34px';
+  el.style.height = '42px';
+  el.innerHTML = `
+    <svg width="34" height="42" viewBox="0 0 34 42" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))">
+      <path d="M17 40C17 40 3.5 24.5 3.5 15.5a13.5 13.5 0 1 1 27 0C30.5 24.5 17 40 17 40z" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="17" cy="15.5" r="5.5" fill="#fff"/>
+    </svg>`;
+  return el;
 }
 
 export default function LocationPicker({
@@ -61,45 +38,94 @@ export default function LocationPicker({
   readOnly = false,
   className = '',
 }: LocationPickerProps) {
-  const center: [number, number] = value
-    ? [value.lat, value.lng]
-    : initialCenter
-    ? [initialCenter.lat, initialCenter.lng]
-    : DEFAULT_CENTER;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const recentered = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // Inicjalizacja mapy (raz)
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const center: [number, number] = value
+      ? [value.lng, value.lat]
+      : initialCenter
+      ? [initialCenter.lng, initialCenter.lat]
+      : DEFAULT_CENTER;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: MAP_STYLE_URL,
+      center,
+      zoom: value || initialCenter ? 15 : 5,
+      maxPitch: 60,
+      attributionControl: { compact: true },
+    });
+    if (readOnly) {
+      map.scrollZoom.disable();
+      map.doubleClickZoom.disable();
+    }
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.on('load', () => add3dBuildings(map));
+    if (!readOnly) {
+      map.on('click', (e) => onChangeRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
+      map.getCanvas().style.cursor = 'crosshair';
+    }
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pinezka — sync z value
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!value) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+    if (!markerRef.current) {
+      markerRef.current = new maplibregl.Marker({
+        element: pinElement(),
+        draggable: !readOnly,
+        anchor: 'bottom',
+      })
+        .setLngLat([value.lng, value.lat])
+        .addTo(map);
+      if (!readOnly) {
+        markerRef.current.on('dragend', () => {
+          const p = markerRef.current!.getLngLat();
+          onChangeRef.current({ lat: p.lat, lng: p.lng });
+        });
+      }
+    } else {
+      markerRef.current.setLngLat([value.lng, value.lat]);
+    }
+  }, [value, readOnly]);
+
+  // Gdy przyjdzie GPS — wycentruj raz
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && initialCenter && !recentered.current) {
+      recentered.current = true;
+      map.jumpTo({ center: [initialCenter.lng, initialCenter.lat], zoom: 15 });
+    }
+  }, [initialCenter]);
 
   return (
     <div className={`relative rounded-2xl overflow-hidden border border-gray-200 ${className}`}>
-      <MapContainer
-        center={center}
-        zoom={value || initialCenter ? 15 : 6}
-        scrollWheelZoom
-        className="w-full h-full z-0"
-        style={{ minHeight: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
-        <Recenter center={initialCenter} />
-        {!readOnly && <ClickHandler onPick={onChange} />}
-        {value && (
-          <Marker
-            position={[value.lat, value.lng]}
-            icon={pawIcon()}
-            draggable={!readOnly}
-            eventHandlers={
-              readOnly
-                ? undefined
-                : {
-                    dragend: (e) => {
-                      const m = e.target.getLatLng();
-                      onChange({ lat: m.lat, lng: m.lng });
-                    },
-                  }
-            }
-          />
-        )}
-      </MapContainer>
+      <div ref={containerRef} className="w-full h-full" />
+      {!readOnly && !value && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/95 shadow-md text-xs font-semibold text-gray-700 pointer-events-none z-10">
+          📍 Kliknij, aby zaznaczyć miejsce
+        </div>
+      )}
     </div>
   );
 }

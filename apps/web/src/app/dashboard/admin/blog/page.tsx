@@ -2,7 +2,7 @@
 import PageHeader from '@/components/PageHeader';
 
 import { useEffect, useState } from 'react';
-import { FileText, Eye, CheckCircle, XCircle, Search, Plus } from 'lucide-react';
+import { FileText, Eye, CheckCircle, XCircle, Search, Plus, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 export default function AdminBlogPage() {
@@ -11,6 +11,7 @@ export default function AdminBlogPage() {
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPost, setNewPost] = useState({ title: '', content: '' });
+  const [viewPost, setViewPost] = useState<any>(null);
 
   useEffect(() => {
     loadPosts();
@@ -49,12 +50,23 @@ export default function AdminBlogPage() {
 
   const handleCreatePost = async () => {
     try {
-      await api.post('/api/blog/posts', newPost);
+      await api.post('/api/admin/blog-posts', newPost);
       setShowCreateModal(false);
       setNewPost({ title: '', content: '' });
       loadPosts();
-    } catch (error) {
-      console.error('Error creating post:', error);
+    } catch (error: any) {
+      alert(error?.response?.data?.error || 'Nie udało się utworzyć posta');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten post?')) return;
+    try {
+      await api.delete(`/api/admin/blog-posts/${id}`);
+      setViewPost(null);
+      loadPosts();
+    } catch (error: any) {
+      alert(error?.response?.data?.error || 'Nie udało się usunąć posta');
     }
   };
 
@@ -127,10 +139,16 @@ export default function AdminBlogPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {/* TODO: View post */}}
+                          onClick={() => setViewPost(post)}
                           className="p-2 text-gray-400 hover:text-brand-dark hover:bg-brand-mint rounded-lg transition-colors"
                         >
                           <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(post.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                         {post.status === 'draft' ? (
                           <button
@@ -156,6 +174,41 @@ export default function AdminBlogPage() {
           </table>
         </div>
       </div>
+
+      {viewPost && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setViewPost(null)}>
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold truncate pr-4">{viewPost.title}</h2>
+              <button onClick={() => setViewPost(null)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4 text-sm text-gray-500">
+                {getStatusBadge(viewPost.status)}
+                <span>•</span>
+                <span>utworzono: {new Date(viewPost.created_at).toLocaleDateString('pl-PL')}</span>
+                {viewPost.published_at && (
+                  <>
+                    <span>•</span>
+                    <span>publikacja: {new Date(viewPost.published_at).toLocaleDateString('pl-PL')}</span>
+                  </>
+                )}
+              </div>
+              <div className="whitespace-pre-wrap text-gray-800">{viewPost.content}</div>
+              <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  onClick={() => handleDelete(viewPost.id)}
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                >
+                  Usuń post
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

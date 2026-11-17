@@ -64,7 +64,7 @@ export default function Statistics() {
 
     // Analizy krwi z API — localStorage był tylko do migracji i jest czyszczony
     bloodAnalysisApi
-      .getAll()
+      .getAll({ silent: true })
       .then((res: any) => setBloodAnalyses(res.analyses || res.bloodAnalyses || []))
       .catch(() => setBloodAnalyses([]));
 

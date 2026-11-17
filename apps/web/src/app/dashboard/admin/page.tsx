@@ -26,21 +26,22 @@ export default function AdminDashboardPage() {
       const [usersRes, petsRes, specialistsRes] = await Promise.all([
         api.get('/api/users/count'),
         api.get('/api/users/pets/count'),
-        api.get('/api/specialists/admin/pending'),
+        api.get('/api/specialists/admin/pending?status=all'),
       ]);
 
       const specialistsData = specialistsRes.data?.specialists || [];
+      const pending = specialistsData.filter((s: any) => s.status === 'pending');
 
       setStats({
         users: usersRes.data?.count || 0,
         pets: petsRes.data?.count || 0,
-        pendingSpecialists: specialistsData.length || 0,
-        approvedSpecialists: 0,
-        totalSpecialists: specialistsData.length || 0,
+        pendingSpecialists: pending.length,
+        approvedSpecialists: specialistsData.filter((s: any) => s.status === 'approved').length,
+        totalSpecialists: specialistsData.length,
         todayRegistrations: 0,
       });
 
-      setRecentActivity(specialistsData.slice(0, 5) || []);
+      setRecentActivity(pending.slice(0, 5));
     } catch (error) {
       console.error('Error loading admin data:', error);
     } finally {

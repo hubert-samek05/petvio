@@ -23,9 +23,14 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      const isMobile = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
-        .Capacitor?.isNativePlatform?.() || window.innerWidth < 768;
-      window.location.href = isMobile ? '/welcome' : '/login';
+      window.location.href = '/welcome';
+    }
+    // 402 = limit planu / funkcja premium → globalny popup „przejdź na wyższy plan”
+    const body = error.response?.data?.error;
+    if (error.response?.status === 402 && body?.code && !(error.config as any)?.silentUpgrade) {
+      try {
+        window.dispatchEvent(new CustomEvent('pv:upgrade', { detail: { ...body, message: body.message } }));
+      } catch {}
     }
     return Promise.reject(error);
   }
@@ -42,6 +47,11 @@ export const authApi = {
   },
   logout: async () => {
     const response = await api.post('/api/auth/logout');
+    return response.data;
+  },
+  // כניסה חברתית — provider 'google' | 'apple'; idToken מספק הזהות
+  oauth: async (provider: 'google' | 'apple', data: { idToken: string; firstName?: string; lastName?: string }) => {
+    const response = await api.post(`/api/auth/${provider}`, data);
     return response.data;
   },
   getMe: async () => {
@@ -839,8 +849,8 @@ export const userPreferencesApi = {
 };
 
 export const bloodAnalysisApi = {
-  getAll: async () => {
-    const response = await api.get('/api/blood-analyses');
+  getAll: async (opts?: { silent?: boolean }) => {
+    const response = await api.get('/api/blood-analyses', { silentUpgrade: opts?.silent } as any);
     return response.data;
   },
   create: async (data: any) => {
@@ -1110,4 +1120,74 @@ export const placesApi = {
     const response = await api.get('/api/places/geocode', { params: { address } });
     return response.data;
   },
+};
+
+export const subscriptionApi = {
+  getMe: async () => {
+    const response = await api.get('/api/subscription/me');
+    return response.data;
+  },
+  startTrial: async (plan: 'family' | 'xl') => {
+    const response = await api.post('/api/subscription/trial', { plan });
+    return response.data;
+  },
+  checkout: async (priceKey: 'family_monthly' | 'family_yearly' | 'xl_monthly' | 'xl_yearly') => {
+    const response = await api.post('/api/subscription/checkout', { priceKey });
+    return response.data as { url: string };
+  },
+  confirm: async (paymentMethodId: string) => {
+    const response = await api.post('/api/subscription/confirm', { paymentMethodId });
+    return response.data;
+  },
+  paylog: (data: { step: string; type?: string; code?: string; message?: string }) => {
+    api.post('/api/subscription/paylog', data).catch(() => {});
+  },
+  paymentSession: async (priceKey: 'family_monthly' | 'family_yearly' | 'xl_monthly' | 'xl_yearly') => {
+    const response = await api.post('/api/subscription/payment-session', { priceKey });
+    return response.data as {
+      clientSecret: string;
+      mode: 'payment' | 'setup';
+      trial: boolean;
+      billing?: { name?: string; email?: string };
+    };
+  },
+  portal: async () => {
+    const response = await api.post('/api/subscription/portal');
+    return response.data as { url: string };
+  },
+  cancel: async () => {
+    const response = await api.post('/api/subscription/cancel');
+    return response.data as { ok: boolean; accessUntil: string | null; alreadyCanceled?: boolean };
+  },
+  resume: async () => {
+    const response = await api.post('/api/subscription/resume');
+    return response.data as { ok: boolean; alreadyActive?: boolean };
+  },
+  history: async () => {
+    const response = await api.get('/api/subscription/history');
+    return response.data as {
+      events: {
+        event_type: string;
+        plan: string | null;
+        billing: string | null;
+        source: string | null;
+        amount_grosz: number | null;
+        currency: string | null;
+        note: string | null;
+        created_at: string;
+      }[];
+    };
+  },
+};
+
+export const adminSubscriptionsApi = {
+  stats: async () => (await api.get('/api/admin/subscriptions/stats')).data,
+  list: async (params: { search?: string; plan?: string; source?: string; page?: number; limit?: number }) =>
+    (await api.get('/api/admin/subscriptions', { params })).data,
+  events: async (params: { type?: string; page?: number; limit?: number }) =>
+    (await api.get('/api/admin/subscriptions/events', { params })).data,
+  grant: async (userId: number, data: { plan: 'family' | 'xl'; days: number; note?: string }) =>
+    (await api.post(`/api/admin/subscriptions/${userId}/grant`, data)).data,
+  revoke: async (userId: number, note?: string) =>
+    (await api.post(`/api/admin/subscriptions/${userId}/revoke`, { note })).data,
 };

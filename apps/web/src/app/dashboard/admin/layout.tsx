@@ -40,14 +40,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }
       } catch {}
     } else {
-      router.push('/login');
+      router.push('/welcome');
     }
   }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/welcome');
   };
 
   const navItems = [

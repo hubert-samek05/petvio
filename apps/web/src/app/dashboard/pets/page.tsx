@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Trash2, PawPrint, Plus, Heart, User, Cake, Weight, RefreshCw } from 'lucide-react';
+import { Trash2, PawPrint, Plus, Heart, User, Cake, Weight, RefreshCw, Lock } from 'lucide-react';
 import { petApi } from '@/lib/api';
+import { usePlan } from '@/lib/plan';
 import PetModal from '@/components/PetModal';
 import PetAddModal from '@/components/PetAddModal';
 import PageHeader from '@/components/PageHeader';
@@ -27,6 +28,9 @@ export default function PetsPage() {
   const [error, setError] = useState('');
   const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const { info: planInfo, openUpgrade } = usePlan();
+  const petUsage = planInfo?.usage.pets;
+  const petAtLimit = !!petUsage && petUsage.max !== null && petUsage.used >= petUsage.max;
   const [filter, setFilter] = useState<string>('all');
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
@@ -87,7 +91,13 @@ export default function PetsPage() {
       icon={PawPrint}
       action={
         <button
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={() => {
+            if (petAtLimit) {
+              openUpgrade({ code: 'PET_LIMIT', limit: petUsage?.max ?? undefined, plan: planInfo?.plan });
+              return;
+            }
+            setIsAddModalOpen(true);
+          }}
           className="pv-btn bg-white text-brand-dark px-5 py-3 text-sm font-bold shadow-lg"
         >
           <Plus className="w-4 h-4" />
@@ -120,6 +130,28 @@ export default function PetsPage() {
   return (
     <div className="space-y-7">
       <Banner />
+
+      {petUsage && petUsage.max !== null && (
+        <div
+          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border ${
+            petAtLimit ? 'bg-amber-50 border-amber-200' : 'bg-brand-cream/70 border-brand-light/60'
+          }`}
+        >
+          <p className={`text-xs font-semibold ${petAtLimit ? 'text-amber-800' : 'text-gray-600'}`}>
+            Zwierzęta w planie {planInfo?.planName}: {petUsage.used} z {petUsage.max}
+            {petAtLimit ? ' — limit wykorzystany' : ''}
+          </p>
+          {petAtLimit && (
+            <button
+              type="button"
+              onClick={() => openUpgrade({ code: 'PET_LIMIT', limit: petUsage.max ?? undefined, plan: planInfo?.plan })}
+              className="text-[11px] font-bold text-brand-dark bg-white border border-brand-light rounded-full px-3 py-1.5 hover:bg-brand-mint transition-colors flex-shrink-0"
+            >
+              Zwiększ limit
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="pv-card p-5 flex flex-col sm:flex-row items-center gap-4 animate-slide-down">
@@ -182,7 +214,11 @@ export default function PetsPage() {
             {filteredPets.map((pet, i) => (
               <div
                 key={pet.id}
-                onClick={() => setSelectedPetId(pet.id)}
+                onClick={() =>
+                  pet.is_frozen
+                    ? openUpgrade({ code: 'PET_FROZEN', plan: planInfo?.plan })
+                    : setSelectedPetId(pet.id)
+                }
                 className={`group pv-card-hover overflow-hidden cursor-pointer flex flex-col animate-slide-up stagger-${Math.min(i + 2, 12)}`}
               >
                 {/* Portret */}
@@ -190,6 +226,16 @@ export default function PetsPage() {
                   className="relative h-44 flex items-center justify-center overflow-hidden flex-shrink-0"
                   style={{ background: SPECIES_BG[pet.species] || SPECIES_BG.other }}
                 >
+                  {pet.is_frozen && (
+                    <div className="absolute inset-0 z-10 bg-gray-900/45 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2">
+                      <span className="w-11 h-11 rounded-full bg-white/15 border border-white/30 flex items-center justify-center">
+                        <Lock className="w-5 h-5 text-white" />
+                      </span>
+                      <span className="text-white text-xs font-bold px-3 py-1 rounded-full bg-black/30">
+                        Zamrożone — wymaga premium
+                      </span>
+                    </div>
+                  )}
                   {pet.photo_url ? (
                     <img
                       src={pet.photo_url}
@@ -249,30 +295,56 @@ export default function PetsPage() {
 
                   {/* Szybkie akcje */}
                   <div className="mt-auto pt-4 border-t border-gray-100/80 flex items-center gap-2">
-                    <Link
-                      href={`/dashboard/pets/${pet.id}/profile`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-mint text-brand-dark text-xs font-bold hover:bg-brand-light transition-all active:scale-95"
-                    >
-                      <User className="w-3.5 h-3.5" /> Profil
-                    </Link>
-                    <Link
-                      href={`/dashboard/health/${pet.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-mint text-brand-dark text-xs font-bold hover:bg-brand-light transition-all active:scale-95"
-                    >
-                      <Heart className="w-3.5 h-3.5" /> Zdrowie
-                    </Link>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteTarget(pet);
-                      }}
-                      className="w-10 h-10 rounded-xl text-red-300 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 flex items-center justify-center flex-shrink-0"
-                      aria-label={`Usuń ${pet.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {pet.is_frozen ? (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openUpgrade({ code: 'PET_FROZEN', plan: planInfo?.plan });
+                          }}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-dark text-white text-xs font-bold hover:bg-brand transition-all active:scale-95"
+                        >
+                          <Lock className="w-3.5 h-3.5" /> Odblokuj
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(pet);
+                          }}
+                          className="w-10 h-10 rounded-xl text-red-300 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 flex items-center justify-center flex-shrink-0"
+                          aria-label={`Usuń ${pet.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/dashboard/pets/${pet.id}/profile`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-mint text-brand-dark text-xs font-bold hover:bg-brand-light transition-all active:scale-95"
+                        >
+                          <User className="w-3.5 h-3.5" /> Profil
+                        </Link>
+                        <Link
+                          href={`/dashboard/health/${pet.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-mint text-brand-dark text-xs font-bold hover:bg-brand-light transition-all active:scale-95"
+                        >
+                          <Heart className="w-3.5 h-3.5" /> Zdrowie
+                        </Link>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(pet);
+                          }}
+                          className="w-10 h-10 rounded-xl text-red-300 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 flex items-center justify-center flex-shrink-0"
+                          aria-label={`Usuń ${pet.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

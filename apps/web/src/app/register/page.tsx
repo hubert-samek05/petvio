@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, PawPrint, Mail, Lock, User } from 'lucide-react';
 import { authApi } from '@/lib/api';
+import SocialAuthButtons from '@/components/SocialAuthButtons';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,6 +19,18 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Zalogowany → od razu do dashboardu
+    if (localStorage.getItem('token')) {
+      router.replace('/dashboard');
+      return;
+    }
+    // Pierwsze wejście w tej sesji → najpierw ekran powitalny
+    if (!sessionStorage.getItem('pv_welcome_seen')) {
+      router.replace('/welcome');
+    }
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -82,7 +95,7 @@ export default function RegisterPage() {
             </Link>
             <Link
               href="/welcome"
-              className="sm:hidden text-xs font-semibold text-brand-dark bg-white border border-gray-200 rounded-full px-3.5 py-2"
+              className="text-xs font-semibold text-brand-dark bg-white border border-gray-200 rounded-full px-3.5 py-2"
             >
               ← Wróć
             </Link>
@@ -208,6 +221,11 @@ export default function RegisterPage() {
               )}
             </button>
           </form>
+
+          <SocialAuthButtons
+            onSuccess={() => router.push('/dashboard')}
+            onError={setError}
+          />
 
           <div className="mt-8 text-center">
             <p className="text-gray-500">
