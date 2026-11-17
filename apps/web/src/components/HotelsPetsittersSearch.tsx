@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import {
   MapPin,
   Navigation,
@@ -13,14 +14,20 @@ import {
   Globe,
   Star,
   Clock,
-  X,
   MapPinned,
   PawPrint,
   AlertTriangle,
+  Users,
 } from 'lucide-react';
 import { placesApi, specialistApi } from '@/lib/api';
 import HotelPetsitterDetailModal from './HotelPetsitterDetailModal';
 import AddHotelPetsitterModal from './AddHotelPetsitterModal';
+import type { MapPlace } from './PlacesMap';
+
+const PlacesMap = dynamic(() => import('@/components/PlacesMap'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gray-100 animate-pulse" />,
+});
 
 // Dozwolone tylko http(s) — dane z OSM/zgłoszeń nie mogą podawać javascript: itp.
 const safeWebsiteUrl = (url?: string | null) => {
@@ -55,10 +62,14 @@ interface HotelPetsitterLocation {
   description?: string;
   priceRange?: string;
   is24h?: boolean;
+  community?: boolean;
 }
+
+type AddressSuggestion = { placeId: string; description: string; lat: number; lng: number };
 
 export default function HotelsPetsittersSearch() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [userLocationLabel, setUserLocationLabel] = useState('');
   const [locating, setLocating] = useState(false);
   const [locationState, setLocationState] = useState<'idle' | 'denied' | 'granted' | 'unsupported' | 'error'>('idle');
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,11 +77,17 @@ export default function HotelsPetsittersSearch() {
   const [locations, setLocations] = useState<HotelPetsitterLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [editingLocation, setEditingLocation] = useState(false);
-  const [customLocation, setCustomLocation] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<HotelPetsitterLocation | null>(null);
   const [searchRadius, setSearchRadius] = useState(10);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // wyszukiwarka adresu z podpowiedziami
+  const [addressInput, setAddressInput] = useState('');
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const suggestDebounce = useRef<NodeJS.Timeout | null>(null);
+  const suggestBoxRef = useRef<HTMLDivElement>(null);
 
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
@@ -129,6 +146,7 @@ export default function HotelsPetsittersSearch() {
             lng: place.location.lng,
             businessStatus: place.businessStatus,
             is24h: place.is24h || false,
+            community: false,
           });
         });
 
@@ -161,6 +179,7 @@ export default function HotelsPetsittersSearch() {
                 description: s.description,
                 priceRange: s.price_info,
                 is24h: false,
+                community: true,
               });
             });
           } catch (e) {
@@ -201,6 +220,52 @@ export default function HotelsPetsittersSearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchRadius, selectedType]);
 
+  // Podpowiedzi adresu — debounce na /api/places/autocomplete
+  useEffect(() => {
+    if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
+    const q = addressInput.trim();
+    if (q.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    suggestDebounce.current = setTimeout(async () => {
+      setSuggestLoading(true);
+      try {
+        const res = await placesApi.autocomplete({ input: q });
+        setSuggestions(res.predictions || []);
+        setShowSuggestions(true);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSuggestLoading(false);
+      }
+    }, 350);
+    return () => {
+      if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
+    };
+  }, [addressInput]);
+
+  // Zamknij podpowiedzi przy kliku poza
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (suggestBoxRef.current && !suggestBoxRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const pickSuggestion = (s: AddressSuggestion) => {
+    setShowSuggestions(false);
+    setAddressInput('');
+    setUserLocation([s.lat, s.lng]);
+    setUserLocationLabel(s.description.split(',').slice(0, 2).join(','));
+    setLocationState('granted');
+    fetchNearbyLocations(s.lat, s.lng, selectedType, searchRadius);
+  };
+
   const handleLocate = () => {
     if (!navigator.geolocation) {
       setLocationState('unsupported');
@@ -212,6 +277,7 @@ export default function HotelsPetsittersSearch() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation([pos.coords.latitude, pos.coords.longitude]);
+        setUserLocationLabel('Twoja aktualna pozycja');
         setLocating(false);
         setLocationState('granted');
         fetchNearbyLocations(pos.coords.latitude, pos.coords.longitude, selectedType, searchRadius);
@@ -229,22 +295,6 @@ export default function HotelsPetsittersSearch() {
     );
   };
 
-  const handleCustomLocationSubmit = async () => {
-    if (!customLocation.trim()) return;
-    setEditingLocation(false);
-    setLoading(true);
-    setError('');
-    try {
-      const data = await placesApi.geocode(customLocation.trim());
-      setUserLocation([data.lat, data.lng]);
-      setLocationState('granted');
-      await fetchNearbyLocations(data.lat, data.lng, selectedType, searchRadius);
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Nie znaleziono lokalizacji. Spróbuj wpisać dokładniejszy adres.');
-      setLoading(false);
-    }
-  };
-
   const openNavigation = (loc: HotelPetsitterLocation) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`;
     window.open(url, '_blank');
@@ -258,6 +308,15 @@ export default function HotelsPetsittersSearch() {
     return true;
   });
 
+  const mapPlaces: MapPlace[] = filteredLocations.map((l) => ({
+    id: l.id,
+    name: l.name,
+    lat: l.lat,
+    lng: l.lng,
+    type: l.type,
+    community: l.community,
+  }));
+
   const typeFilters: { value: 'all' | 'hotel' | 'petsitter'; label: string; Icon: any }[] = [
     { value: 'all', label: 'Wszystkie', Icon: MapPin },
     { value: 'hotel', label: 'Hotele', Icon: Building2 },
@@ -265,35 +324,71 @@ export default function HotelsPetsittersSearch() {
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Szukajka */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <div className="space-y-4 sm:space-y-5">
+      {/* Pasek lokalizacji — adres z podpowiedziami + GPS + dodaj */}
+      <div className="flex gap-2">
+        <div ref={suggestBoxRef} className="relative flex-1">
+          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-dark z-10" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filtruj wyniki po nazwie lub adresie..."
-            className="w-full bg-white border border-gray-200 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            placeholder={userLocationLabel || 'Wpisz adres lub miasto, np. Kraków, ul. Floriańska…'}
+            className="w-full bg-white border border-gray-200 rounded-2xl pl-10 pr-10 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 shadow-sm"
           />
+          {suggestLoading && (
+            <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+          )}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute top-full mt-2 left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-30 max-h-64 overflow-y-auto">
+              {suggestions.map((s) => (
+                <button
+                  key={s.placeId}
+                  onClick={() => pickSuggestion(s)}
+                  className="w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-brand-mint/60 transition-colors border-b border-gray-50 last:border-0"
+                >
+                  <MapPin className="w-4 h-4 text-brand-dark flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-gray-700 leading-snug">{s.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 sm:py-3 pv-btn-primary text-sm rounded-2xl whitespace-nowrap"
+          onClick={handleLocate}
+          disabled={locating}
+          title="Użyj mojej lokalizacji"
+          className="px-3.5 py-3 rounded-2xl bg-white border border-gray-200 text-brand-dark hover:bg-brand-mint transition-colors shadow-sm disabled:opacity-50"
         >
-          + Dodaj hotel / petsittera
+          {locating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Crosshair className="w-5 h-5" />}
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="px-4 py-3 pv-btn-primary text-sm rounded-2xl whitespace-nowrap shadow-sm"
+        >
+          + Dodaj
         </button>
       </div>
 
+      {(locationState === 'denied' || locationState === 'unsupported' || locationState === 'error') && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-sm">
+          {locationState === 'denied'
+            ? 'Dostęp do lokalizacji zablokowany — wpisz adres powyżej.'
+            : locationState === 'unsupported'
+              ? 'Geolokalizacja nie jest wspierana — wpisz adres powyżej.'
+              : 'Nie udało się ustalić pozycji — wpisz adres powyżej.'}
+        </div>
+      )}
+
       {/* Filtry typu + promień */}
-      <div className="pv-card p-4 sm:p-5 space-y-4">
+      <div className="pv-card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           {typeFilters.map(({ value, label, Icon }) => (
             <button
               key={value}
               onClick={() => setSelectedType(value)}
-              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
                 selectedType === value
                   ? 'bg-brand-dark text-white border-brand-dark'
                   : 'bg-white text-gray-600 border-gray-200 hover:border-brand-dark/40'
@@ -302,100 +397,50 @@ export default function HotelsPetsittersSearch() {
               <Icon className="w-4 h-4" /> {label}
             </button>
           ))}
+          <div className="relative flex-1 min-w-[140px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filtruj po nazwie..."
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            />
+          </div>
         </div>
 
         {userLocation && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-600">Promień wyszukiwania</label>
-              <span className="text-xs font-semibold text-brand-dark">{searchRadius} km</span>
-            </div>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-gray-600 whitespace-nowrap">Promień</label>
             <input
               type="range"
               min="1"
               max="50"
               value={searchRadius}
               onChange={(e) => setSearchRadius(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-dark"
+              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-dark"
             />
+            <span className="text-xs font-semibold text-brand-dark whitespace-nowrap w-14 text-right">
+              {searchRadius} km
+            </span>
           </div>
         )}
       </div>
 
-      {/* Lokalizacja */}
-      <div className="pv-card p-4 sm:p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Twoja lokalizacja</h3>
-          {!userLocation && !editingLocation && (
-            <button onClick={() => setEditingLocation(true)} className="text-xs text-brand-dark hover:underline">
-              Wpisz ręcznie
-            </button>
-          )}
-        </div>
-
-        {editingLocation ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={customLocation}
-              onChange={(e) => setCustomLocation(e.target.value)}
-              placeholder="np. Warszawa, ul. Marszałkowska 1"
-              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-              onKeyDown={(e) => e.key === 'Enter' && handleCustomLocationSubmit()}
-            />
-            <button
-              onClick={handleCustomLocationSubmit}
-              disabled={loading || !customLocation.trim()}
-              className="px-4 py-2.5 rounded-xl pv-btn-primary text-sm disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Szukaj'}
-            </button>
-            <button
-              onClick={() => {
-                setEditingLocation(false);
-                setCustomLocation('');
-              }}
-              className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-all"
-            >
-              Anuluj
-            </button>
-          </div>
-        ) : userLocation ? (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-brand-dark/10">
-            <MapPin className="w-4 h-4 text-brand-dark" />
-            <span className="text-sm text-gray-700">Lokalizacja ustawiona</span>
-            <button
-              onClick={() => {
-                setUserLocation(null);
-                setLocationState('idle');
-                setLocations([]);
-              }}
-              className="ml-auto text-xs text-gray-500 hover:text-gray-700"
-            >
-              Zmień
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={handleLocate}
-            disabled={locating}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl pv-btn-primary disabled:opacity-50"
-          >
-            {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
-            {locating ? 'Pobieranie lokalizacji...' : 'Użyj mojej lokalizacji'}
-          </button>
-        )}
-
-        {(locationState === 'denied' || locationState === 'unsupported' || locationState === 'error') && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-sm">
-            {locationState === 'denied'
-              ? 'Dostęp do lokalizacji został zablokowany. Wpisz lokalizację ręcznie.'
-              : locationState === 'unsupported'
-                ? 'Geolokalizacja nie jest wspierana. Wpisz lokalizację ręcznie.'
-                : 'Nie udało się ustalić Twojej pozycji. Sprawdź sygnał GPS i spróbuj ponownie, albo wpisz lokalizację ręcznie.'}
-          </div>
-        )}
-      </div>
+      {/* Mapa z wynikami */}
+      {userLocation && (
+        <PlacesMap
+          center={{ lat: userLocation[0], lng: userLocation[1] }}
+          radiusKm={searchRadius}
+          places={mapPlaces}
+          selectedId={selectedLocation?.id}
+          onSelect={(id) => {
+            const loc = filteredLocations.find((l) => l.id === id);
+            if (loc) setSelectedLocation(loc);
+          }}
+          className="h-[340px] sm:h-[420px]"
+        />
+      )}
 
       {/* Blad */}
       {error && (
@@ -432,10 +477,19 @@ export default function HotelsPetsittersSearch() {
           <h4 className="font-semibold text-gray-900 mb-2">Brak wyników</h4>
           <p className="text-sm text-gray-500">
             {selectedType === 'all'
-              ? 'Nie znaleziono hoteli dla zwierząt ani petsitterów w okolicy. Spróbuj zwiększyć promień.'
-              : `Nie znaleziono ${selectedType === 'hotel' ? 'hoteli dla zwierząt' : 'petsitterów'} w okolicy. Spróbuj zwiększyć promień.`}
+              ? 'Nie znaleziono hoteli dla zwierząt ani petsitterów w okolicy. Spróbuj zwiększyć promień albo dodaj pierwsze miejsce!'
+              : `Nie znaleziono ${selectedType === 'hotel' ? 'hoteli dla zwierząt' : 'petsitterów'} w okolicy. Spróbuj zwiększyć promień albo dodaj pierwsze miejsce!`}
           </p>
         </div>
+      )}
+
+      {/* Licznik wyników */}
+      {!loading && filteredLocations.length > 0 && (
+        <p className="text-xs text-gray-500 px-1">
+          Znaleziono <span className="font-semibold text-gray-700">{filteredLocations.length}</span>{' '}
+          {filteredLocations.length === 1 ? 'miejsce' : filteredLocations.length < 5 ? 'miejsca' : 'miejsc'} w promieniu{' '}
+          {searchRadius} km
+        </p>
       )}
 
       {/* Wyniki */}
@@ -470,6 +524,11 @@ export default function HotelsPetsittersSearch() {
                 {loc.is24h && (
                   <div className="absolute top-2 right-2 bg-brand-dark text-white text-[10px] font-bold px-2 py-1 rounded-full z-10">
                     24/7
+                  </div>
+                )}
+                {loc.community && (
+                  <div className="absolute top-2 left-2 inline-flex items-center gap-1 bg-violet-600 text-white text-[10px] font-bold px-2 py-1 rounded-full z-10">
+                    <Users className="w-3 h-3" /> Od społeczności
                   </div>
                 )}
               </div>
