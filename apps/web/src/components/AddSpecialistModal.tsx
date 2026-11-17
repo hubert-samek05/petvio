@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Loader2, MapPin, CheckCircle2, ChevronRight, ChevronLeft, User, Phone, Globe, FileText, Brain, GraduationCap, Heart, PawPrint, Apple } from 'lucide-react';
-import { specialistApi } from '@/lib/api';
+import dynamic from 'next/dynamic';
+import { X, Loader2, MapPin, CheckCircle2, ChevronRight, ChevronLeft, User, Phone, Globe, FileText, Brain, GraduationCap, Heart, PawPrint, Apple, Scissors, Search } from 'lucide-react';
+import { specialistApi, placesApi } from '@/lib/api';
+
+const LocationPicker = dynamic(() => import('@/components/LocationPicker'), { ssr: false });
 
 const typeOptions = [
   { value: 'behaviorist', label: 'Behawiorysta', icon: Brain },
   { value: 'trainer', label: 'Trener', icon: GraduationCap },
   { value: 'zoopsychologist', label: 'Zoopsycholog', icon: Heart },
   { value: 'dietitian', label: 'Dietetyk', icon: Apple },
+  { value: 'groomer', label: 'Groomer', icon: Scissors },
 ];
 
 const stepLabels = ['Typ specjalisty', 'Gatunek', 'Dane', 'Kontakt', 'Podsumowanie'];
@@ -30,6 +34,7 @@ export default function AddSpecialistModal({ onClose, defaultType }: { onClose: 
     longitude: null as number | null,
   });
   const [locating, setLocating] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -63,6 +68,21 @@ export default function AddSpecialistModal({ onClose, defaultType }: { onClose: 
       () => setLocating(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  };
+
+  const handleGeocodeAddress = async () => {
+    const q = [form.address, form.city].filter(Boolean).join(', ').trim();
+    if (!q) return;
+    setGeocoding(true);
+    setError('');
+    try {
+      const data = await placesApi.geocode(q);
+      setForm((f) => ({ ...f, latitude: data.lat, longitude: data.lng }));
+    } catch {
+      setError('Nie znaleziono tego adresu — zaznacz miejsce ręcznie na mapie');
+    } finally {
+      setGeocoding(false);
+    }
   };
 
   const validateStep = () => {
@@ -337,17 +357,42 @@ export default function AddSpecialistModal({ onClose, defaultType }: { onClose: 
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleUseLocation}
-                    disabled={locating}
-                    className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-                      form.latitude != null ? 'bg-brand-mint text-brand-dark' : 'bg-brand-dark/10 text-brand-dark hover:bg-brand-dark/20'
-                    }`}
-                  >
-                    {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-                    {form.latitude != null ? 'Lokalizacja ustawiona' : 'Ustaw dokładną lokalizację (opcjonalnie)'}
-                  </button>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5 block">
+                      Dokładna lokalizacja (opcjonalnie)
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={handleUseLocation}
+                        disabled={locating}
+                        className="flex-1 inline-flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-brand-dark/10 text-brand-dark hover:bg-brand-dark/20 transition-all disabled:opacity-50"
+                      >
+                        {locating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+                        Moja pozycja
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGeocodeAddress}
+                        disabled={geocoding || !form.city.trim()}
+                        className="flex-1 inline-flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-brand-dark/10 text-brand-dark hover:bg-brand-dark/20 transition-all disabled:opacity-50"
+                      >
+                        {geocoding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        Z adresu
+                      </button>
+                    </div>
+                    <LocationPicker
+                      value={form.latitude != null && form.longitude != null ? { lat: form.latitude, lng: form.longitude } : null}
+                      onChange={(loc) => setForm((f) => ({ ...f, latitude: loc.lat, longitude: loc.lng }))}
+                      initialCenter={form.latitude != null && form.longitude != null ? { lat: form.latitude, lng: form.longitude } : null}
+                      className="h-48"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      {form.latitude != null
+                        ? `Ustawiona: ${form.latitude.toFixed(5)}, ${form.longitude?.toFixed(5)} — możesz przeciągnąć pinezkę`
+                        : 'Kliknij na mapie albo użyj przycisków — dzięki temu specjalista pojawi się na mapie wyników'}
+                    </p>
+                  </div>
                 </div>
               )}
 

@@ -1012,7 +1012,7 @@ export const barfApi = {
 };
 
 export const specialistApi = {
-  getAll: async (params?: { type?: string; species?: string; lat?: number; lng?: number; city?: string; radius?: number }) => {
+  getAll: async (params?: { type?: string; species?: string; lat?: number; lng?: number; city?: string; radius?: number; search?: string }) => {
     const response = await api.get('/api/specialists', { params });
     return response.data;
   },

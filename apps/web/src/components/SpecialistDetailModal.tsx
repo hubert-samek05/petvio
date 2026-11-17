@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { X, Phone, Mail, Globe, MapPin, Navigation, Dog, Cat, Brain, GraduationCap, Heart, HeartHandshake, Apple, Hotel, UserCheck } from 'lucide-react';
+import { X, Phone, Mail, Globe, MapPin, Navigation, Dog, Cat, Brain, GraduationCap, Heart, HeartHandshake, Apple, Hotel, UserCheck, Scissors, Briefcase } from 'lucide-react';
 
 interface Specialist {
   id: number;
@@ -30,6 +30,7 @@ const typeLabels: Record<string, string> = {
   trainer: 'Trener',
   zoopsychologist: 'Zoopsycholog',
   dietitian: 'Dietetyk',
+  groomer: 'Groomer',
   hotel: 'Hotel',
   petsitter: 'Petsitter',
 };
@@ -39,6 +40,7 @@ const typeIcons: Record<string, any> = {
   trainer: GraduationCap,
   zoopsychologist: Heart,
   dietitian: Apple,
+  groomer: Scissors,
   hotel: Hotel,
   petsitter: UserCheck,
 };
@@ -175,6 +177,22 @@ export default function SpecialistDetailModal({ specialist, onClose }: Specialis
               <Navigation className="w-4 h-4" /> Nawiguj w Google Maps
             </button>
           )}
+
+          {/* Przejęcie profilu — wkrótce */}
+          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-violet-50 to-brand-mint/40 border border-violet-100">
+            <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0">
+              <Briefcase className="w-4 h-4 text-violet-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-900">To Ty?</p>
+              <p className="text-[11px] text-gray-500">
+                Przejmij profil i przyjmuj wizyty online — panel firmowy
+              </p>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wide text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+              Wkrótce
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 const { query } = require('../config/database');
 
-const VALID_TYPES = ['behaviorist', 'trainer', 'zoopsychologist', 'dietitian', 'hotel', 'petsitter', 'vet'];
+const VALID_TYPES = ['behaviorist', 'trainer', 'zoopsychologist', 'dietitian', 'hotel', 'petsitter', 'vet', 'groomer'];
 const VALID_SPECIES = ['dog', 'cat', 'both'];
 const isInt = (v) => Number.isInteger(Number(v));
 const bad = (res, message) => res.status(400).json({ error: { message, status: 400 } });

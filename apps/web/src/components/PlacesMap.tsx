@@ -10,7 +10,8 @@ export type MapPlace = {
   name: string;
   lat: number;
   lng: number;
-  type: 'hotel' | 'petsitter' | 'vet' | 'dietitian';
+  /** dowolny typ kategorii — kolor z COLORS / colors, nieznany typ = fiolet */
+  type: string;
   community?: boolean;
   urgent?: boolean;
 };
@@ -34,6 +35,10 @@ const COLORS: Record<string, string> = {
   vet: '#dc2626',
   dietitian: '#0891b2',
   community: '#7c3aed',
+  behaviorist: '#7c3aed',
+  trainer: '#ea580c',
+  zoopsychologist: '#db2777',
+  groomer: '#0284c7',
 };
 
 const DEFAULT_LEGEND: MapLegendItem[] = [

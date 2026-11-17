@@ -8,7 +8,7 @@ import { HeartHandshake } from 'lucide-react';
 export default function SpecialistsPage() {
   return (
     <div className="space-y-8">
-      <PageHeader icon={HeartHandshake} title="Specjaliści" description="Znajdź behawiorystę, trenera, zoopsychologa lub dietetyka blisko Ciebie" />
+      <PageHeader icon={HeartHandshake} title="Specjaliści" description="Behawiorysta, trener, zoopsycholog, dietetyk lub groomer blisko Ciebie" />
 
       <Specialists />
     </div>
