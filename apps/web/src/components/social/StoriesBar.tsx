@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import {
   ChevronLeft,
   ChevronRight,
+  Clock,
   Eye,
   Film,
   ImagePlus,
@@ -46,12 +47,17 @@ interface StorySticker {
   x: number;
   y: number;
   scale: number;
+  kind?: 'emoji' | 'badge';
+  label?: string;
+  color?: string;
 }
 
 interface StoryMeta {
   texts?: StoryTextEl[];
   stickers?: StorySticker[];
   music?: { title: string; artist: string; url?: string } | null;
+  template?: { from: string; to: string; textColor: string };
+  duration?: number;
 }
 
 interface Story {
@@ -79,6 +85,37 @@ interface AuthorStories {
 }
 
 const STORY_BG = ['#1B6B4A', '#0F3D2E', '#2E8B62', '#7C3AED', '#DB2777', '#EA580C', '#2563EB'];
+
+// Szablony tekstowych relacji — gradient + sugerowany kolor tekstu
+const STORY_TEMPLATES = [
+  { id: 'forest', name: 'Las', from: '#1B6B4A', to: '#0F3D2E', textColor: '#ffffff' },
+  { id: 'sunset', name: 'Zachód', from: '#EA580C', to: '#DB2777', textColor: '#ffffff' },
+  { id: 'ocean', name: 'Ocean', from: '#2563EB', to: '#0F3D2E', textColor: '#ffffff' },
+  { id: 'violet', name: 'Fiolet', from: '#7C3AED', to: '#4C1D95', textColor: '#ffffff' },
+  { id: 'berry', name: 'Malina', from: '#DB2777', to: '#7C3AED', textColor: '#ffffff' },
+  { id: 'mint', name: 'Mięta', from: '#34d399', to: '#1B6B4A', textColor: '#ffffff' },
+  { id: 'night', name: 'Noc', from: '#111827', to: '#374151', textColor: '#ffffff' },
+  { id: 'sand', name: 'Piasek', from: '#fbbf24', to: '#EA580C', textColor: '#111827' },
+  { id: 'sky', name: 'Niebo', from: '#60a5fa', to: '#2563EB', textColor: '#ffffff' },
+];
+
+// Odznaki-naklejki (emoji + podpis w pigułce)
+const STORY_BADGES = [
+  { emoji: '🐾', label: 'Mój pupil', color: '#7C3AED' },
+  { emoji: '🎂', label: 'Urodziny', color: '#DB2777' },
+  { emoji: '🏠', label: 'Nowy dom', color: '#059669' },
+  { emoji: '❤️', label: 'Adopcja', color: '#DB2777' },
+  { emoji: '🚶', label: 'Spacer', color: '#2563EB' },
+  { emoji: '🏆', label: 'Osiągnięcie', color: '#EA580C' },
+  { emoji: '✨', label: 'Nowość', color: '#7C3AED' },
+  { emoji: '💤', label: 'Drzemka', color: '#111827' },
+  { emoji: '🩺', label: 'Wizyta u weta', color: '#059669' },
+  { emoji: '🎓', label: 'Trening', color: '#EA580C' },
+];
+
+const DEFAULT_IMAGE_DURATION_S = 7;
+const MAX_IMAGE_DURATION_S = 15;
+const MAX_VIDEO_DURATION_S = 60;
 
 const groupByAuthor = (stories: Story[], myId: string): AuthorStories[] => {
   const map = new Map<string, AuthorStories>();
@@ -127,17 +164,35 @@ function StoryViewer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const story = author.stories[idx];
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const markViewed = (s: Story) => {
     if (!s.seenByMe) storiesApi.view(s.id).catch(() => {});
   };
 
+  const goNext = () => {
+    if (idx < author.stories.length - 1) setIdx(idx + 1);
+    else onClose();
+  };
+
+  // Czas wyświetlania: meta.duration; fallback — film 60 s, obraz/tekst 6 s
+  const dur = Math.min(
+    story.meta?.duration || (story.mediaType === 'video' ? MAX_VIDEO_DURATION_S : 6),
+    story.mediaType === 'video' ? MAX_VIDEO_DURATION_S : MAX_IMAGE_DURATION_S
+  );
+
   useEffect(() => {
     markViewed(story);
-    timer.current = setTimeout(() => {
-      if (idx < author.stories.length - 1) setIdx(idx + 1);
-      else onClose();
-    }, 6000);
+    // Dla filmu czekamy na 'ended' albo limit — timer to awaryjny cap
+    timer.current = setTimeout(goNext, dur * 1000);
+    if (story.mediaType === 'video') {
+      const v = videoRef.current;
+      if (v) {
+        const durMs = (v.duration && isFinite(v.duration) ? v.duration : MAX_VIDEO_DURATION_S) * 1000;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(goNext, Math.min(durMs, MAX_VIDEO_DURATION_S * 1000) + 400);
+      }
+    }
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
@@ -168,19 +223,20 @@ function StoryViewer({
         {story.meta?.music?.url && (
           <audio key={story.id} src={story.meta.music.url} autoPlay loop />
         )}
-        {/* Paski postępu */}
-        <div className="absolute top-3 inset-x-3 z-20 flex gap-1">
+        {/* Paski postępu — czas zgodny z długością relacji */}
+        <div className="absolute top-[calc(env(safe-area-inset-top)+0.75rem)] inset-x-3 z-20 flex gap-1">
           {author.stories.map((s, i) => (
             <div key={s.id} className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden">
               <div
                 className={`h-full bg-white ${i < idx ? 'w-full' : i === idx ? 'story-progress' : 'w-0'}`}
+                style={i === idx ? { animationDuration: `${dur}s` } : undefined}
               />
             </div>
           ))}
         </div>
 
         {/* Nagłówek */}
-        <div className="absolute top-7 inset-x-4 z-20 flex items-center gap-2.5">
+        <div className="absolute top-[calc(env(safe-area-inset-top)+1.75rem)] inset-x-4 z-20 flex items-center gap-2.5">
           <Avatar name={author.authorName} url={author.authorAvatar} size="sm" />
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-semibold truncate drop-shadow">{author.authorName}</p>
@@ -214,16 +270,23 @@ function StoryViewer({
 
         {/* Treść */}
         {story.image && story.mediaType === 'video' ? (
-          <video src={story.image} className="w-full h-full object-cover" autoPlay loop playsInline muted={false} controls={false} />
+          <video ref={videoRef} src={story.image} className="w-full h-full object-cover" autoPlay loop playsInline muted={false} controls={false} />
         ) : story.image ? (
           <img src={story.image} alt="" className="w-full h-full object-cover" />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center p-8"
-            style={{ background: `linear-gradient(160deg, ${story.bgColor}, #0F3D2E)` }}
+            style={{
+              background: story.meta?.template
+                ? `linear-gradient(160deg, ${story.meta.template.from}, ${story.meta.template.to})`
+                : `linear-gradient(160deg, ${story.bgColor}, #0F3D2E)`,
+            }}
           >
             {!story.meta?.texts?.length && (
-              <p className="text-white text-xl sm:text-2xl font-semibold text-center break-words drop-shadow">
+              <p
+                className="text-xl sm:text-2xl font-semibold text-center break-words drop-shadow"
+                style={{ color: story.meta?.template?.textColor || '#ffffff' }}
+              >
                 {story.text}
               </p>
             )}
@@ -250,19 +313,36 @@ function StoryViewer({
           </p>
         ))}
         {story.meta?.stickers?.map((s, i) => (
-          <span
-            key={`s${i}`}
-            className="absolute pointer-events-none select-none"
-            style={{
-              left: `${s.x}%`,
-              top: `${s.y}%`,
-              transform: `translate(-50%, -50%) scale(${s.scale})`,
-              fontSize: '3rem',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-            }}
-          >
-            {s.emoji}
-          </span>
+          s.kind === 'badge' ? (
+            <span
+              key={`s${i}`}
+              className="absolute pointer-events-none select-none inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-white font-bold shadow-lg"
+              style={{
+                left: `${s.x}%`,
+                top: `${s.y}%`,
+                transform: `translate(-50%, -50%) scale(${s.scale})`,
+                fontSize: '1rem',
+                background: s.color || '#7C3AED',
+              }}
+            >
+              <span className="text-xl leading-none">{s.emoji}</span>
+              {s.label && <span className="whitespace-nowrap">{s.label}</span>}
+            </span>
+          ) : (
+            <span
+              key={`s${i}`}
+              className="absolute pointer-events-none select-none"
+              style={{
+                left: `${s.x}%`,
+                top: `${s.y}%`,
+                transform: `translate(-50%, -50%) scale(${s.scale})`,
+                fontSize: '3rem',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+              }}
+            >
+              {s.emoji}
+            </span>
+          )
         ))}
         {story.meta?.music && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm text-white pointer-events-none">
@@ -333,15 +413,18 @@ function StoryComposer({
   const previewRef = useRef<HTMLAudioElement>(null);
   const drag = useRef<{ kind: 'text' | 'sticker'; id: string } | null>(null);
   const [mode, setMode] = useState<'media' | 'text'>('media');
-  const [media, setMedia] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+  const [media, setMedia] = useState<{ url: string; type: 'image' | 'video'; duration?: number } | null>(null);
   const [texts, setTexts] = useState<TextEl[]>([]);
   const [stickers, setStickers] = useState<StickerEl[]>([]);
   const [music, setMusic] = useState<{ title: string; artist: string; url: string } | null>(null);
   const [musicTab, setMusicTab] = useState<'library' | 'upload'>('library');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [bgColor, setBgColor] = useState(STORY_BG[0]);
+  const [template, setTemplate] = useState<typeof STORY_TEMPLATES[number] | null>(STORY_TEMPLATES[0]);
+  const [duration, setDuration] = useState(DEFAULT_IMAGE_DURATION_S);
   const [sel, setSel] = useState<Sel>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiTab, setEmojiTab] = useState<'emoji' | 'badge'>('emoji');
   const [musicOpen, setMusicOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -385,10 +468,30 @@ function StoryComposer({
         setError(`Filmik może mieć maks. ${MAX_STORY_VIDEO_MB} MB.`);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => setMedia({ url: reader.result as string, type: 'video' });
-      reader.onerror = () => setError('Nie udało się wczytać filmiku.');
-      reader.readAsDataURL(f);
+      const objectUrl = URL.createObjectURL(f);
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.src = objectUrl;
+      probe.onloadedmetadata = () => {
+        const dur = probe.duration;
+        URL.revokeObjectURL(objectUrl);
+        if (isFinite(dur) && dur > MAX_VIDEO_DURATION_S) {
+          setError(`Filmik może trwać maks. ${MAX_VIDEO_DURATION_S} s — Twój ma ${Math.round(dur)} s.`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setMedia({ url: reader.result as string, type: 'video', duration: isFinite(dur) ? dur : undefined });
+        reader.onerror = () => setError('Nie udało się wczytać filmiku.');
+        reader.readAsDataURL(f);
+      };
+      probe.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        // Nie dało się odczytać metadanych — przepuszczamy, limit pilnuje odtwarzanie
+        const reader = new FileReader();
+        reader.onload = () => setMedia({ url: reader.result as string, type: 'video' });
+        reader.onerror = () => setError('Nie udało się wczytać filmiku.');
+        reader.readAsDataURL(f);
+      };
       return;
     }
     try {
@@ -444,6 +547,13 @@ function StoryComposer({
     setEmojiOpen(false);
   };
 
+  const addBadge = (b: { emoji: string; label: string; color: string }) => {
+    const s: StickerEl = { id: nextId(), emoji: b.emoji, label: b.label, color: b.color, kind: 'badge', x: 50, y: 50, scale: 1 };
+    setStickers((l) => [...l, s]);
+    setSel({ kind: 'sticker', id: s.id });
+    setEmojiOpen(false);
+  };
+
   // Przeciąganie elementów po canvasie
   const startDrag = (e: React.PointerEvent, kind: 'text' | 'sticker', id: string) => {
     e.preventDefault();
@@ -488,11 +598,18 @@ function StoryComposer({
       if (cleanTexts.length) meta.texts = cleanTexts;
       if (stickers.length) meta.stickers = stickers.map(({ id, ...s }) => s);
       if (music) meta.music = music;
+      if (mode === 'text' && template) meta.template = { from: template.from, to: template.to, textColor: template.textColor };
+      // Zdjęcie/tekst: 3–15 s (wybór twórcy); film: długość wykryta przy wgraniu, cap 60 s
+      if (media?.type === 'video' && mode === 'media') {
+        meta.duration = Math.min(media.duration || MAX_VIDEO_DURATION_S, MAX_VIDEO_DURATION_S);
+      } else {
+        meta.duration = Math.min(Math.max(duration, 3), MAX_IMAGE_DURATION_S);
+      }
       await storiesApi.create({
         image: mode === 'media' ? media?.url : undefined,
         mediaType: mode === 'media' ? media?.type : undefined,
         text: cleanTexts[0]?.content || '',
-        bgColor,
+        bgColor: template?.from || bgColor,
         meta: Object.keys(meta).length ? meta : undefined,
       });
       onCreated();
@@ -511,8 +628,11 @@ function StoryComposer({
   return (
     <Portal>
     <div className="fixed inset-0 z-[100] bg-[#F6F4EE] flex flex-col overflow-hidden">
-      {/* Nagłówek — jasny, spójny z aplikacją */}
-      <div className="flex items-center justify-between px-3 py-3 bg-white border-b border-gray-200 shrink-0">
+      {/* Nagłówek — jasny, spójny z aplikacją; safe-area chroni przed notchem/status barem */}
+      <div
+        className="flex items-center justify-between px-3 pb-3 bg-white border-b border-gray-200 shrink-0"
+        style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
+      >
         <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 text-gray-500" aria-label="Zamknij">
           <X className="w-5 h-5" />
         </button>
@@ -534,7 +654,15 @@ function StoryComposer({
           ref={canvasRef}
           onClick={() => { setSel(null); setEmojiOpen(false); }}
           className="relative w-full max-w-[300px] aspect-[9/16] max-h-[52vh] rounded-3xl overflow-hidden shadow-xl touch-none select-none shrink-0"
-          style={mode === 'text' ? { background: `linear-gradient(160deg, ${bgColor}, #0F3D2E)` } : { background: '#111' }}
+          style={
+            mode === 'text'
+              ? {
+                  background: template
+                    ? `linear-gradient(160deg, ${template.from}, ${template.to})`
+                    : `linear-gradient(160deg, ${bgColor}, #0F3D2E)`,
+                }
+              : { background: '#111' }
+          }
         >
           {/* Muzyka relacji — podgląd gra podczas edycji */}
           {music?.url && <audio src={music.url} autoPlay loop />}
@@ -583,24 +711,46 @@ function StoryComposer({
             </p>
           ))}
 
-          {/* Nakładki — emoji */}
+          {/* Nakładki — emoji + odznaki */}
           {stickers.map((s) => (
-            <span
-              key={s.id}
-              onPointerDown={(e) => startDrag(e, 'sticker', s.id)}
-              onPointerMove={onDragMove}
-              onPointerUp={endDrag}
-              className={`absolute cursor-move ${sel?.kind === 'sticker' && sel.id === s.id ? 'outline outline-2 outline-white/70 rounded-lg' : ''}`}
-              style={{
-                left: `${s.x}%`,
-                top: `${s.y}%`,
-                transform: `translate(-50%, -50%) scale(${s.scale})`,
-                fontSize: '3rem',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-              }}
-            >
-              {s.emoji}
-            </span>
+            s.kind === 'badge' ? (
+              <span
+                key={s.id}
+                onPointerDown={(e) => startDrag(e, 'sticker', s.id)}
+                onPointerMove={onDragMove}
+                onPointerUp={endDrag}
+                className={`absolute cursor-move inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-white font-bold shadow-lg ${
+                  sel?.kind === 'sticker' && sel.id === s.id ? 'outline outline-2 outline-white/70' : ''
+                }`}
+                style={{
+                  left: `${s.x}%`,
+                  top: `${s.y}%`,
+                  transform: `translate(-50%, -50%) scale(${s.scale})`,
+                  fontSize: '1rem',
+                  background: s.color || '#7C3AED',
+                }}
+              >
+                <span className="text-xl leading-none">{s.emoji}</span>
+                {s.label && <span className="whitespace-nowrap">{s.label}</span>}
+              </span>
+            ) : (
+              <span
+                key={s.id}
+                onPointerDown={(e) => startDrag(e, 'sticker', s.id)}
+                onPointerMove={onDragMove}
+                onPointerUp={endDrag}
+                className={`absolute cursor-move ${sel?.kind === 'sticker' && sel.id === s.id ? 'outline outline-2 outline-white/70 rounded-lg' : ''}`}
+                style={{
+                  left: `${s.x}%`,
+                  top: `${s.y}%`,
+                  transform: `translate(-50%, -50%) scale(${s.scale})`,
+                  fontSize: '3rem',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                }}
+              >
+                {s.emoji}
+              </span>
+            )
           ))}
 
           {/* Chip muzyki */}
@@ -684,16 +834,45 @@ function StoryComposer({
             </div>
           )}
 
-          {/* Panel emoji */}
+          {/* Panel naklejek — emoji + odznaki */}
           {emojiOpen && (
-            <div className="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
-              <div className="grid grid-cols-8 gap-1">
-                {STORY_EMOJI.map((e) => (
-                  <button key={e} onClick={() => addSticker(e)} className="text-2xl p-1 rounded-lg hover:bg-gray-100 transition-colors">
-                    {e}
-                  </button>
-                ))}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex border-b border-gray-100">
+                <button
+                  onClick={() => setEmojiTab('emoji')}
+                  className={`flex-1 py-2 text-xs font-semibold ${emojiTab === 'emoji' ? 'text-brand-dark border-b-2 border-brand-dark' : 'text-gray-400'}`}
+                >
+                  Emoji
+                </button>
+                <button
+                  onClick={() => setEmojiTab('badge')}
+                  className={`flex-1 py-2 text-xs font-semibold ${emojiTab === 'badge' ? 'text-brand-dark border-b-2 border-brand-dark' : 'text-gray-400'}`}
+                >
+                  Odznaki
+                </button>
               </div>
+              {emojiTab === 'emoji' ? (
+                <div className="p-3 grid grid-cols-8 gap-1 max-h-52 overflow-y-auto">
+                  {STORY_EMOJI.map((e) => (
+                    <button key={e} onClick={() => addSticker(e)} className="text-2xl p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 flex flex-wrap gap-2 max-h-52 overflow-y-auto">
+                  {STORY_BADGES.map((b) => (
+                    <button
+                      key={b.label}
+                      onClick={() => addBadge(b)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-white text-sm font-bold shadow hover:scale-105 transition-transform"
+                      style={{ background: b.color }}
+                    >
+                      <span>{b.emoji}</span> {b.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -752,18 +931,77 @@ function StoryComposer({
             </div>
           )}
 
+          {/* Szablony tekstowych relacji — gradientowe tła */}
           {mode === 'text' && (
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
-              <span className="text-gray-500 text-xs font-medium">Tło:</span>
-              {STORY_BG.map((c) => (
+            <div className="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm space-y-2.5">
+              <p className="text-gray-500 text-xs font-medium">Szablon:</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {STORY_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTemplate(t)}
+                    className={`flex-shrink-0 w-14 rounded-xl overflow-hidden border-2 transition-all ${
+                      template?.id === t.id ? 'border-brand-dark scale-105 shadow-md' : 'border-transparent hover:border-gray-300'
+                    }`}
+                    aria-label={`Szablon ${t.name}`}
+                  >
+                    <div className="aspect-[9/16] w-full" style={{ background: `linear-gradient(160deg, ${t.from}, ${t.to})` }} />
+                    <p className="text-[9px] font-semibold text-center py-0.5 bg-white text-gray-600">{t.name}</p>
+                  </button>
+                ))}
                 <button
-                  key={c}
-                  onClick={() => setBgColor(c)}
-                  className={`w-7 h-7 rounded-full transition-transform ${bgColor === c ? 'ring-2 ring-gray-800 ring-offset-2 scale-110' : 'hover:scale-110'}`}
-                  style={{ backgroundColor: c }}
-                  aria-label={`Kolor ${c}`}
-                />
-              ))}
+                  onClick={() => setTemplate(null)}
+                  className={`flex-shrink-0 w-14 rounded-xl overflow-hidden border-2 transition-all ${
+                    !template ? 'border-brand-dark scale-105 shadow-md' : 'border-transparent hover:border-gray-300'
+                  }`}
+                  aria-label="Własny kolor"
+                >
+                  <div className="aspect-[9/16] w-full flex items-center justify-center bg-gray-100 text-gray-400 text-lg">🎨</div>
+                  <p className="text-[9px] font-semibold text-center py-0.5 bg-white text-gray-600">Własny</p>
+                </button>
+              </div>
+              {!template && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 text-xs font-medium">Kolor:</span>
+                  {STORY_BG.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setBgColor(c)}
+                      className={`w-7 h-7 rounded-full transition-transform ${bgColor === c ? 'ring-2 ring-gray-800 ring-offset-2 scale-110' : 'hover:scale-110'}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Kolor ${c}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Czas wyświetlania — zdjęcie/tekst do 15 s; film pokazuje wykrytą długość */}
+          {mode === 'media' && media?.type === 'video' ? (
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <span className="text-xs text-gray-600 flex-1">
+                Film będzie wyświetlany przez{' '}
+                <span className="font-semibold text-brand-dark">
+                  {Math.round(Math.min(media.duration || MAX_VIDEO_DURATION_S, MAX_VIDEO_DURATION_S))} s
+                </span>
+                {' '}(maks. {MAX_VIDEO_DURATION_S} s)
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+              <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span className="text-xs text-gray-600 whitespace-nowrap">Czas:</span>
+              <input
+                type="range"
+                min={3}
+                max={MAX_IMAGE_DURATION_S}
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-dark"
+              />
+              <span className="text-xs font-semibold text-brand-dark w-8 text-right">{duration} s</span>
             </div>
           )}
 

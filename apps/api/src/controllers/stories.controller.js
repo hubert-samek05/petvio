@@ -8,6 +8,10 @@ const STORY_TTL_HOURS = 24;
 
 const TEXT_COLORS = ['#ffffff', '#111827', '#fbbf24', '#f87171', '#34d399', '#60a5fa', '#f472b6', '#a78bfa'];
 const TEXT_SIZES = ['sm', 'md', 'lg'];
+const BADGE_COLORS = ['#7C3AED', '#DB2777', '#EA580C', '#059669', '#2563EB', '#111827'];
+const HEX6 = /^#[0-9a-fA-F]{6}$/;
+const MAX_IMAGE_DURATION_S = 15;
+const MAX_VIDEO_DURATION_S = 60;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 
 // Sanityzacja nakładek edytora relacji (tekst/emoji/muzyka)
@@ -25,12 +29,20 @@ const sanitizeMeta = (meta) => {
     if (texts.length) out.texts = texts;
   }
   if (Array.isArray(meta.stickers)) {
-    const stickers = meta.stickers.slice(0, 20).map((s) => ({
-      emoji: String(s?.emoji || '').slice(0, 8),
-      x: clamp(s?.x, 0, 100),
-      y: clamp(s?.y, 0, 100),
-      scale: clamp(s?.scale, 0.5, 3) || 1,
-    })).filter((s) => s.emoji);
+    const stickers = meta.stickers.slice(0, 20).map((s) => {
+      const base = {
+        emoji: String(s?.emoji || '').slice(0, 8),
+        x: clamp(s?.x, 0, 100),
+        y: clamp(s?.y, 0, 100),
+        scale: clamp(s?.scale, 0.5, 3) || 1,
+      };
+      if (s?.kind === 'badge') {
+        base.kind = 'badge';
+        base.label = String(s?.label || '').trim().slice(0, 24);
+        base.color = BADGE_COLORS.includes(s?.color) ? s.color : BADGE_COLORS[0];
+      }
+      return base;
+    }).filter((s) => s.emoji);
     if (stickers.length) out.stickers = stickers;
   }
   if (meta.music && typeof meta.music === 'object') {
@@ -41,6 +53,17 @@ const sanitizeMeta = (meta) => {
     const isAudioData = /^data:audio\/(mpeg|mp3|mp4|m4a|x-m4a|wav|x-wav|ogg|webm|aac);base64,[A-Za-z0-9+/=\s]+$/.test(url);
     url = isLibTrack || (isAudioData && url.length <= 7 * 1024 * 1024) ? url : '';
     if (title || artist || url) out.music = { title, artist, url: url || undefined };
+  }
+  // Szablon tła (gradient) — dwa kolory + kolor tekstu
+  if (meta.template && typeof meta.template === 'object') {
+    const from = HEX6.test(meta.template.from || '') ? meta.template.from : null;
+    const to = HEX6.test(meta.template.to || '') ? meta.template.to : null;
+    const textColor = HEX6.test(meta.template.textColor || '') ? meta.template.textColor : '#ffffff';
+    if (from && to) out.template = { from, to, textColor };
+  }
+  // Czas wyświetlania relacji (sekundy) — finalny limit wg mediaType w createStory
+  if (meta.duration != null) {
+    out.duration = clamp(meta.duration, 3, MAX_VIDEO_DURATION_S);
   }
   return Object.keys(out).length ? out : null;
 };
@@ -97,6 +120,10 @@ const createStory = async (req, res) => {
     const text = String(req.body?.text || '').trim().slice(0, MAX_TEXT_LEN);
     const bgColor = /^#[0-9a-fA-F]{6}$/.test(req.body?.bgColor || '') ? req.body.bgColor : '#1B6B4A';
     const meta = sanitizeMeta(req.body?.meta);
+    // Zdjęcie/tekst: maks. 15 s; film: maks. 60 s
+    if (meta?.duration && mediaType !== 'video') {
+      meta.duration = Math.min(meta.duration, MAX_IMAGE_DURATION_S);
+    }
     if (!image && !text && !meta?.texts?.length) {
       return res.status(400).json({ error: { message: 'Relacja nie może być pusta — dodaj zdjęcie, film lub tekst', status: 400 } });
     }

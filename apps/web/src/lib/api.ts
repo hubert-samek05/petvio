@@ -482,8 +482,10 @@ export const storiesApi = {
     bgColor?: string;
     meta?: {
       texts?: { content: string; x: number; y: number; color: string; size: 'sm' | 'md' | 'lg' }[];
-      stickers?: { emoji: string; x: number; y: number; scale: number }[];
+      stickers?: { emoji: string; x: number; y: number; scale: number; kind?: 'emoji' | 'badge'; label?: string; color?: string }[];
       music?: { title: string; artist: string; url?: string } | null;
+      template?: { from: string; to: string; textColor: string };
+      duration?: number;
     };
   }) => {
     const response = await api.post('/api/stories', data);
