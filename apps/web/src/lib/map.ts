@@ -4,6 +4,14 @@ import * as maplibregl from 'maplibre-gl';
 // Styl "liberty": kolorowe POI, czytelne etykiety, profesjonalny wygląd.
 export const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
+// maplibre-gl v6 + webpack/Next: worker MUSI byc wskazany jawnie, inaczej
+// mapa renderuje puste tlo (znany bug — import.meta.url nie trafia na worker).
+// UWAGA: przy aktualizacji maplibre-gl skopiuj na nowo:
+//   node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs → public/
+if (typeof window !== 'undefined') {
+  maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
+}
+
 // Budynki 3D — warstwa fill-extrusion na danych OpenMapTiles
 export function add3dBuildings(map: maplibregl.Map) {
   try {
