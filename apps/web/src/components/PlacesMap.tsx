@@ -10,9 +10,12 @@ export type MapPlace = {
   name: string;
   lat: number;
   lng: number;
-  type: 'hotel' | 'petsitter';
+  type: 'hotel' | 'petsitter' | 'vet' | 'dietitian';
   community?: boolean;
+  urgent?: boolean;
 };
+
+export type MapLegendItem = { color: string; label: string };
 
 type PlacesMapProps = {
   center: { lat: number; lng: number } | null;
@@ -21,9 +24,23 @@ type PlacesMapProps = {
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   className?: string;
+  colors?: Partial<Record<string, string>>;
+  legend?: MapLegendItem[];
 };
 
-const COLORS = { hotel: '#065f46', petsitter: '#b45309', community: '#7c3aed' };
+const COLORS: Record<string, string> = {
+  hotel: '#065f46',
+  petsitter: '#b45309',
+  vet: '#dc2626',
+  dietitian: '#0891b2',
+  community: '#7c3aed',
+};
+
+const DEFAULT_LEGEND: MapLegendItem[] = [
+  { color: COLORS.hotel, label: 'Hotel dla zwierząt' },
+  { color: COLORS.petsitter, label: 'Petsitter / opieka' },
+  { color: COLORS.community, label: 'Od społeczności' },
+];
 
 function circleGeoJSON(lng: number, lat: number, radiusKm: number): Feature {
   const pts = 64;
@@ -37,14 +54,18 @@ function circleGeoJSON(lng: number, lat: number, radiusKm: number): Feature {
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
 }
 
-function pinElement(color: string, icon: 'hotel' | 'petsitter') {
+function pinElement(color: string, icon: MapPlace['type'] | 'petsitter') {
   const el = document.createElement('div');
   el.style.width = '32px';
   el.style.height = '40px';
   const inner =
     icon === 'hotel'
       ? '<rect x="11" y="9.5" width="10" height="9" rx="1.2" fill="none" stroke="#fff" stroke-width="1.6"/><rect x="13" y="15.5" width="2.6" height="3" fill="#fff"/><rect x="13" y="11.4" width="2.4" height="2.2" fill="#fff"/><rect x="16.6" y="11.4" width="2.4" height="2.2" fill="#fff"/>'
-      : '<g fill="#fff"><ellipse cx="16" cy="17.5" rx="4.4" ry="3.4"/><circle cx="11" cy="13.4" r="1.8"/><circle cx="14.2" cy="11" r="1.8"/><circle cx="17.8" cy="11" r="1.8"/><circle cx="21" cy="13.4" r="1.8"/></g>';
+      : icon === 'vet'
+        ? '<g fill="#fff"><rect x="14.2" y="9.5" width="3.6" height="13" rx="1"/><rect x="9.5" y="14.2" width="13" height="3.6" rx="1"/></g>'
+        : icon === 'dietitian'
+          ? '<g fill="#fff"><circle cx="16" cy="15.5" r="6.5"/><path d="M16 9c2 1.5 2 4.5 0 6.5s-2 4.5 0 6.5" stroke="#0891b2" stroke-width="1.4" fill="none"/></g>'
+          : '<g fill="#fff"><ellipse cx="16" cy="17.5" rx="4.4" ry="3.4"/><circle cx="11" cy="13.4" r="1.8"/><circle cx="14.2" cy="11" r="1.8"/><circle cx="17.8" cy="11" r="1.8"/><circle cx="21" cy="13.4" r="1.8"/></g>';
   el.innerHTML = `
     <svg width="32" height="40" viewBox="0 0 32 40" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))">
       <path d="M16 38C16 38 3.4 23.4 3.4 14.7a12.6 12.6 0 1 1 25.2 0C28.6 23.4 16 38 16 38z" fill="${color}" stroke="#fff" stroke-width="2.4"/>
@@ -71,7 +92,12 @@ export default function PlacesMap({
   selectedId,
   onSelect,
   className = '',
+  colors,
+  legend,
 }: PlacesMapProps) {
+  const colorOf = (p: MapPlace) =>
+    (p.community ? colors?.community ?? COLORS.community : colors?.[p.type] ?? COLORS[p.type]) || COLORS.community;
+  const legendItems = legend ?? DEFAULT_LEGEND;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -167,7 +193,7 @@ export default function PlacesMap({
         existing.setLngLat([p.lng, p.lat]);
         return;
       }
-      const color = p.community ? COLORS.community : COLORS[p.type];
+      const color = colorOf(p);
       const el = pinElement(color, p.type);
       el.style.cursor = 'pointer';
       el.addEventListener('click', (e) => {
@@ -207,15 +233,11 @@ export default function PlacesMap({
       <div ref={containerRef} className="w-full h-full" />
       {/* legenda */}
       <div className="absolute bottom-3 left-3 flex flex-col gap-1 px-3 py-2 rounded-xl bg-white/95 shadow-md text-[11px] font-medium text-gray-700 z-10 pointer-events-none">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS.hotel }} /> Hotel dla zwierząt
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS.petsitter }} /> Petsitter / opieka
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS.community }} /> Od społeczności
-        </span>
+        {legendItems.map((item) => (
+          <span key={item.label} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} /> {item.label}
+          </span>
+        ))}
       </div>
     </div>
   );
