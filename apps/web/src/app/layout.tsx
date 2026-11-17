@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Quicksand, Fraunces } from "next/font/google";
 import "./globals.css";
+// MapLibre CSS globalnie — import w dynamicznych komponentach powoduje
+// blad Next.js 'entryCSSFiles' i crash strony
+import "maplibre-gl/dist/maplibre-gl.css";
 
 const quicksand = Quicksand({ 
   subsets: ["latin"],

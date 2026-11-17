@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   MapPin, Play, Pause, Square, Clock, Route, Footprints, Plus,
-  ChevronDown, ChevronUp, Trash2, Gauge, PawPrint, AlertTriangle,
+  ChevronDown, ChevronUp, Trash2, AlertTriangle,
   Share2, Loader2, Check,
 } from 'lucide-react';
 import { petApi, walkApi, postsApi } from '@/lib/api';
@@ -627,97 +627,88 @@ export default function WalkTracker() {
         </div>
       )}
 
-      {/* ====== LIVE STATS + MAPA ====== */}
-      {isTracking && (
-        <div
-          className="relative rounded-[28px] text-white overflow-hidden px-6 sm:px-8 py-6 animate-slide-down"
-          style={{ background: 'linear-gradient(135deg, #0F3D2E 0%, #1B6B4A 55%, #2E8B62 100%)' }}
-        >
-          <PawPrint className="absolute -right-4 -top-6 w-32 h-32 text-white/[0.07] rotate-12 animate-float" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-4">
-              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-300' : 'bg-[#8FE3B4] animate-pulse'}`} />
-              <span className="text-xs font-semibold uppercase tracking-wide text-white/80">
-                {isPaused ? 'Spacer wstrzymany' : 'Spacer w trakcie'} · {petOf(selectedPet)?.name}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <div className="flex items-center gap-1.5 text-white/70 text-xs mb-1"><Clock className="w-3.5 h-3.5" /> Czas</div>
-                <p className="text-2xl sm:text-3xl font-bold tabular-nums">{formatDuration(duration)}</p>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 text-white/70 text-xs mb-1"><Route className="w-3.5 h-3.5" /> Dystans</div>
-                <p className="text-2xl sm:text-3xl font-bold tabular-nums">{formatDistance(distance)}</p>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 text-white/70 text-xs mb-1"><Gauge className="w-3.5 h-3.5" /> Tempo</div>
-                <p className="text-2xl sm:text-3xl font-bold tabular-nums">{pace || '—'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ====== MAPA ====== */}
+      {/* ====== MAPA Z KONTROLKAMI (Strava-style) ====== */}
       <div className="pv-card overflow-hidden animate-slide-up stagger-6">
-        <div className="h-72 sm:h-96 relative bg-brand-mint/40">
-          {points.length > 0 || currentLocation ? (
-            <WalkMap points={points} current={currentLocation} following={isTracking && !isPaused} className="h-full" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-3 rounded-3xl bg-white shadow-md flex items-center justify-center">
-                  <MapPin className={`w-7 h-7 ${isTracking ? 'text-brand animate-bounce-soft' : 'text-gray-400'}`} />
+        <div className="h-80 sm:h-[26rem] relative bg-brand-mint/40">
+          <WalkMap points={points} current={currentLocation} following={isTracking && !isPaused} className="h-full" />
+
+          {/* Statystyki na żywo — nakładka na mapę */}
+          {isTracking && (
+            <div className="absolute top-3 left-3 right-3 sm:right-auto sm:min-w-[300px] z-[500] rounded-2xl px-4 py-3 backdrop-blur-md bg-[#0F3D2E]/85 text-white shadow-xl animate-slide-down">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-300' : 'bg-[#8FE3B4] animate-pulse'}`} />
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                  {isPaused ? 'Wstrzymany' : 'W trakcie'} · {petOf(selectedPet)?.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-5">
+                <div>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Czas</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{formatDuration(duration)}</p>
                 </div>
-                <p className="text-sm font-semibold text-gray-700">
-                  {isTracking ? (gpsError ? 'Problem z GPS' : 'Oczekiwanie na sygnał GPS…') : 'Mapa trasy pojawi się po rozpoczęciu spaceru'}
-                </p>
-                <p className="text-xs text-gray-400 mt-1 max-w-[260px]">
-                  {isTracking ? 'Może to potrwać kilka sekund — upewnij się, że GPS jest włączony.' : 'Punkty trasy będą rysowane na żywo.'}
-                </p>
+                <div>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Dystans</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{formatDistance(distance)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Tempo</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{pace || '—'}</p>
+                </div>
               </div>
             </div>
           )}
+
+          {/* Podpowiedź przed startem */}
+          {!isTracking && !currentLocation && points.length === 0 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] px-4 py-2 rounded-full bg-white/90 backdrop-blur shadow-md text-xs font-semibold text-gray-600 whitespace-nowrap">
+              🐾 Trasa narysuje się na żywo podczas spaceru
+            </div>
+          )}
+
+          {/* Błąd GPS */}
           {gpsError && isTracking && (
-            <div className="absolute bottom-3 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto z-[500] flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-red-500 text-white text-xs font-semibold shadow-lg animate-slide-up">
+            <div className="absolute top-20 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto z-[500] flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-red-500 text-white text-xs font-semibold shadow-lg animate-slide-up">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {gpsError}
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ====== KONTROLKI ====== */}
-      <div className="pv-card p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row gap-3">
-          {!isTracking ? (
-            <button
-              onClick={startWalk}
-              disabled={!selectedPet || pets.length === 0}
-              className="pv-btn-primary flex-1 px-6 py-4 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Play className="w-5 h-5" /> Rozpocznij spacer
-            </button>
-          ) : (
-            <>
-              {!isPaused ? (
-                <button onClick={pauseWalk} className="pv-btn flex-1 px-6 py-4 rounded-2xl bg-amber-500 text-white font-semibold hover:bg-amber-600">
-                  <Pause className="w-5 h-5" /> Pauza
-                </button>
-              ) : (
-                <button onClick={resumeWalk} className="pv-btn-primary flex-1 px-6 py-4">
-                  <Play className="w-5 h-5" /> Wznów
-                </button>
-              )}
+          {/* Kontrolki — nakładka na dole mapy */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[500] w-[calc(100%-2rem)] max-w-sm">
+            {!isTracking ? (
               <button
-                onClick={stopWalk}
-                disabled={saving}
-                className="pv-btn flex-1 px-6 py-4 rounded-2xl bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-60"
+                onClick={startWalk}
+                disabled={!selectedPet || pets.length === 0}
+                className="w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-brand-dark text-white font-bold text-base shadow-2xl hover:bg-brand transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Square className="w-5 h-5" /> {saving ? 'Zapisywanie…' : 'Zakończ i zapisz'}
+                <Play className="w-5 h-5" /> Rozpocznij spacer
               </button>
-            </>
-          )}
+            ) : (
+              <div className="flex gap-2.5">
+                {!isPaused ? (
+                  <button
+                    onClick={pauseWalk}
+                    className="flex-1 flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-2xl hover:bg-amber-600 transition-all active:scale-95"
+                  >
+                    <Pause className="w-5 h-5" /> Pauza
+                  </button>
+                ) : (
+                  <button
+                    onClick={resumeWalk}
+                    className="flex-1 flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-brand-dark text-white font-bold shadow-2xl hover:bg-brand transition-all active:scale-95"
+                  >
+                    <Play className="w-5 h-5" /> Wznów
+                  </button>
+                )}
+                <button
+                  onClick={stopWalk}
+                  disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-red-500 text-white font-bold shadow-2xl hover:bg-red-600 transition-all active:scale-95 disabled:opacity-60"
+                >
+                  <Square className="w-5 h-5" /> {saving ? 'Zapis…' : 'Zakończ'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

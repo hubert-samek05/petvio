@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAP_STYLE_URL, add3dBuildings } from '@/lib/map';
 
 export type MapPoint = { lat: number; lng: number; timestamp?: number };
