@@ -51,12 +51,15 @@ export const iapAvailable = (): boolean => !!getPurchases() && !!apiKey;
 
 let configured = false;
 let loggedInUser: string | null = null;
+let lastError = '';
+
+export const getIAPDebugInfo = () => ({ configured, lastError });
 
 // Inicjalizacja IAP po zalogowaniu — configure z appUserID = id użytkownika Petvio,
 // dzięki temu webhook RevenueCat (app_user_id) mapuje się wprost na users.id.
 export const initIAP = async (userId: number): Promise<void> => {
   const Purchases = getPurchases();
-  if (!Purchases || !apiKey) return;
+  if (!Purchases || !apiKey) { lastError = 'no plugin/key'; return; }
   const appUserID = `u${userId}`;
   try {
     if (!configured) {
@@ -68,6 +71,7 @@ export const initIAP = async (userId: number): Promise<void> => {
       loggedInUser = appUserID;
     }
   } catch (e) {
+    lastError = String((e as any)?.message || e).slice(0, 120);
     console.warn('IAP init failed:', e);
   }
 };
@@ -83,11 +87,21 @@ export const logoutIAP = async (): Promise<void> => {
 
 export const getIAPOfferings = async (): Promise<RcPackage[]> => {
   const Purchases = getPurchases();
-  if (!Purchases || !configured) return [];
+  if (!Purchases) { lastError = 'no plugin'; return []; }
+  if (!configured) { lastError = lastError || 'not configured'; return []; }
   try {
-    const { offerings } = await Purchases.getOfferings();
-    return offerings.current?.availablePackages ?? [];
+    const res: any = await Purchases.getOfferings();
+    // v14 zwraca Offerings wprost; starsze wersje owijały w {offerings}
+    const offerings = res?.offerings || res;
+    const cur = typeof offerings?.current === 'string'
+      ? offerings?.all?.[offerings.current]
+      : (offerings?.current || offerings?.all?.default);
+    if (!cur) { lastError = 'raw:' + JSON.stringify(res).slice(0, 150); return []; }
+    const pkgs: RcPackage[] = cur?.availablePackages ?? [];
+    if (pkgs.length) lastError = 'p0:' + JSON.stringify(pkgs[0]?.product || pkgs[0]).slice(0, 140);
+    return pkgs;
   } catch (e) {
+    lastError = String((e as any)?.message || e).slice(0, 120);
     console.warn('IAP offerings failed:', e);
     return [];
   }

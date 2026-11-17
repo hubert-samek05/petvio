@@ -87,6 +87,43 @@ const webhook = async (req, res) => {
         });
         break;
       }
+      case 'PRODUCT_CHANGE': {
+        // Zmiana planu w tej samej grupie subskrypcji App Store.
+        // UPGRADE (np. Family -> XL): natychmiastowy + zwrot proporcjonalny od Apple.
+        // DOWNGRADE/CROSSGRADE: Apple przekłada na koniec okresu — NIE zmieniamy planu teraz,
+        // zastosuje się przy RENEWAL z nowym product_id.
+        const newMapping = productMap(ev.new_product_id || ev.product_id);
+        if (!newMapping) {
+          console.warn('[RC] PRODUCT_CHANGE nieznany produkt:', ev.new_product_id, ev.product_id);
+          return res.json({ ok: true, skipped: 'unknown_product' });
+        }
+        const cur = await query('SELECT plan, plan_source FROM users WHERE id = $1', [userId]);
+        const order = { mini: 0, family: 1, xl: 2 };
+        const isUpgrade = (order[newMapping.plan] || 0) > (order[cur.rows[0]?.plan] || 0);
+        const isApple = cur.rows[0]?.plan_source === 'apple';
+
+        if (isApple && !isUpgrade) {
+          await query(
+            `INSERT INTO subscription_events (user_id, event_type, plan, source, external_id, note)
+             VALUES ($1, 'plan_change_scheduled', (SELECT plan FROM users WHERE id = $1), 'apple', $2, $3)
+             ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO NOTHING`,
+            [userId, externalId, `Zaplanowano zmianę na ${newMapping.plan} (${newMapping.billing}) — wejdzie przy końcu bieżącego okresu`]
+          );
+          break;
+        }
+        await applyPlan(userId, {
+          plan: newMapping.plan,
+          source: 'apple',
+          billing: newMapping.billing,
+          expiresAt,
+          eventType: 'purchase',
+          amountGrosz,
+          externalId,
+          cancelAtPeriodEnd: false,
+          note: `Zmiana planu (upgrade) — ${storeNote}, produkt ${ev.new_product_id || ev.product_id}`,
+        });
+        break;
+      }
       case 'CANCELLATION': {
         // Klient anulował auto-renewal — plan zostaje do końca okresu (expiresAt)
         await query(

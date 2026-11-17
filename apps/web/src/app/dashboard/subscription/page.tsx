@@ -9,7 +9,7 @@ import PageHeader from '@/components/PageHeader';
 import { planBullets } from '@/components/UpgradeModal';
 import { formatPln, usePlan, type PlanCatalogItem, type UsageItem } from '@/lib/plan';
 import { subscriptionApi } from '@/lib/api';
-import { getIAPOfferings, iapAvailable, initIAP, onCustomerInfoUpdate, purchaseIAPPackage, restoreIAPPurchases, type RcPackage } from '@/lib/iap';
+import { getIAPDebugInfo, getIAPOfferings, iapAvailable, initIAP, onCustomerInfoUpdate, purchaseIAPPackage, restoreIAPPurchases, type RcPackage } from '@/lib/iap';
 
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
@@ -59,6 +59,7 @@ const EVENT_META: Record<string, { label: string; icon: typeof Check; cls: strin
   renewal: { label: 'Odnowienie subskrypcji', icon: RotateCcw, cls: 'bg-brand-mint text-brand-dark' },
   trial_started: { label: 'Start okresu próbnego', icon: Sparkles, cls: 'bg-amber-100 text-amber-800' },
   cancel_scheduled: { label: 'Zaplanowano anulowanie', icon: Clock, cls: 'bg-amber-100 text-amber-800' },
+  plan_change_scheduled: { label: 'Zaplanowano zmianę planu', icon: Clock, cls: 'bg-amber-100 text-amber-800' },
   cancel: { label: 'Subskrypcja zakończona', icon: X, cls: 'bg-red-50 text-red-600' },
   resume: { label: 'Wznowienie subskrypcji', icon: CheckCircle2, cls: 'bg-brand-mint text-brand-dark' },
   expired: { label: 'Plan wygasł', icon: Clock, cls: 'bg-gray-100 text-gray-500' },
@@ -604,7 +605,8 @@ export default function SubscriptionPage() {
           const featured = p.id === 'family';
           const paid = p.id !== 'mini';
           const price = yearly ? Math.round(p.priceYearly / 12) : p.priceMonthly;
-          // iOS: gdy mamy ofertę z App Store, pokazujemy jej cenę (jedyna gwarancja zgodności z ASC)
+          // iOS: paczka IAP tylko do przycisku kupna; ceny wyświetlamy z katalogu (PLN),
+          // bo RC w sandboxie raportuje storefront US — Apple i tak pokazuje lokalną cenę na sheet
           const iapPkg = isIOS && paid ? packageFor(p.id, yearly) : undefined;
           const canTrial = paid && info.trialAvailable;
           return (
@@ -627,13 +629,11 @@ export default function SubscriptionPage() {
               <p className={`text-sm mt-1 mb-5 ${featured ? 'text-white/70' : 'text-gray-400'}`}>{p.tagline}</p>
 
               <p className="mb-1">
-                <span className="font-serif text-4xl">
-                  {iapPkg ? iapPkg.product.priceString : paid ? formatPln(price) : '0 zł'}
-                </span>
-                <span className={`text-sm ${featured ? 'text-white/60' : 'text-gray-400'}`}> {iapPkg ? (yearly ? '/ rok' : '/ mies.') : '/ mies.'}</span>
+                <span className="font-serif text-4xl">{paid ? formatPln(price) : '0 zł'}</span>
+                <span className={`text-sm ${featured ? 'text-white/60' : 'text-gray-400'}`}> / mies.</span>
               </p>
               <p className={`text-xs mb-5 h-4 ${featured ? 'text-white/60' : 'text-gray-400'}`}>
-                {paid && yearly ? `${iapPkg ? iapPkg.product.priceString : formatPln(p.priceYearly)} rozliczane rocznie` : paid ? 'rozliczane co miesiąc' : 'bez karty, bez terminu'}
+                {paid && yearly ? `${formatPln(p.priceYearly)} rozliczane rocznie` : paid ? 'rozliczane co miesiąc' : 'bez karty, bez terminu'}
               </p>
 
               <ul className="space-y-2.5 mb-6 flex-1">
@@ -670,7 +670,13 @@ export default function SubscriptionPage() {
                   {busy === p.id ? 'Uruchamiam…' : `Wypróbuj ${info.trialDays} dni za darmo`}
                 </button>
               ) : isIOS && iapAvailable() ? (
-                iapPackages === null ? (
+                info.stripeManaged ? (
+                  <p className={`w-full py-3.5 rounded-2xl text-center text-xs font-semibold ${
+                    featured ? 'bg-white/10 text-white/70' : 'bg-gray-50 text-gray-400'
+                  }`}>
+                    Masz już subskrypcję przez petvio.pl — zarządzaj nią na stronie
+                  </p>
+                ) : iapPackages === null ? (
                   <p className={`w-full py-3.5 rounded-2xl text-center text-xs font-semibold ${
                     featured ? 'bg-white/10 text-white/70' : 'bg-gray-50 text-gray-400'
                   }`}>
@@ -684,7 +690,7 @@ export default function SubscriptionPage() {
                       featured ? 'bg-white text-brand-dark hover:bg-brand-mint' : 'bg-brand-dark text-white hover:bg-brand'
                     }`}
                   >
-                    {busy === p.id ? 'Przetwarzam…' : `Wykup — ${packageFor(p.id, yearly)!.product.priceString}`}
+                    {busy === p.id ? 'Przetwarzam…' : info.appleManaged ? 'Zmień plan' : `Wykup — ${formatPln(yearly ? p.priceYearly : p.priceMonthly)}`}
                   </button>
                 ) : (
                   <p className={`w-full py-3.5 rounded-2xl text-center text-xs font-semibold ${
@@ -720,6 +726,15 @@ export default function SubscriptionPage() {
           );
         })}
       </div>
+
+      {/* DEBUG IAP — usunąć po weryfikacji */}
+      {isIOS && (
+        <p className="text-[10px] text-gray-300 text-center">
+          iap: {iapAvailable() ? 'plugin ok' : 'NO PLUGIN'} · oferty: {iapPackages === null ? 'ładuję' : iapPackages.length}
+          {iapPackages && iapPackages.length > 0 ? ` · ids: ${iapPackages.map((p) => p.product?.identifier || '?').join(', ')}` : ''}
+          {` · cfg:${getIAPDebugInfo().configured ? 1 : 0} err:${getIAPDebugInfo().lastError || '-'}`}
+        </p>
+      )}
 
       {/* Informacje wymagane przez App Store (3.1.2) — tylko na iOS */}
       {isIOS && iapAvailable() && (
