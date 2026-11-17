@@ -162,6 +162,8 @@ app.use((req, res) => {
   });
 });
 
+require('./jobs/reminders').start();
+
 app.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════╗
