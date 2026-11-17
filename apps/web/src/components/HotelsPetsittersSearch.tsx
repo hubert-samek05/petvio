@@ -154,7 +154,7 @@ export default function HotelsPetsittersSearch() {
         const dbTypes = typeFilter === 'all' ? ['hotel', 'petsitter'] : [typeFilter];
         for (const dbType of dbTypes) {
           try {
-            const res = await specialistApi.getAll({ type: dbType });
+            const res = await specialistApi.getAll({ type: dbType, lat, lng, radius: radiusKm });
             (res.specialists || []).forEach((s: any) => {
               const sLat = s.latitude != null ? parseFloat(s.latitude) : null;
               const sLng = s.longitude != null ? parseFloat(s.longitude) : null;

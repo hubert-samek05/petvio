@@ -28,7 +28,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 const getAll = async (req, res) => {
   try {
-    const { type, species, lat, lng, city, search } = req.query;
+    const { type, species, lat, lng, city, search, radius } = req.query;
 
     const conditions = [`s.status = 'approved'`];
     const params = [];
@@ -63,6 +63,7 @@ const getAll = async (req, res) => {
       userLat !== null && userLng !== null && !Number.isNaN(userLat) && !Number.isNaN(userLng);
 
     if (hasLocation) {
+      const radiusKm = radius != null && radius !== '' ? parseFloat(radius) : null;
       specialists = specialists.map((s) => {
         const sLat = s.latitude != null ? parseFloat(s.latitude) : null;
         const sLng = s.longitude != null ? parseFloat(s.longitude) : null;
@@ -72,6 +73,10 @@ const getAll = async (req, res) => {
             : null;
         return { ...s, distanceKm };
       });
+      // Filtr promienia — przy 1600+ wpisach zwracanie wszystkich to marnowany transfer
+      if (radiusKm != null && !Number.isNaN(radiusKm)) {
+        specialists = specialists.filter((s) => s.distanceKm != null && s.distanceKm <= radiusKm);
+      }
       specialists.sort((a, b) => {
         if (a.distanceKm == null && b.distanceKm == null) return 0;
         if (a.distanceKm == null) return 1;
