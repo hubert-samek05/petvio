@@ -58,6 +58,51 @@ interface WalkDraft {
 
 /** Geolokalizacja — natywna wtyczka w aplikacji Capacitor, navigator w przeglądarce. */
 const capGeo = (): any => (window as any).Capacitor?.Plugins?.Geolocation;
+const bgGeo = (): any => (window as any).Capacitor?.Plugins?.BackgroundGeolocation;
+const localNotif = (): any => (window as any).Capacitor?.Plugins?.LocalNotifications;
+const isNativeApp = () => !!(window as any).Capacitor?.isNativePlatform?.();
+
+// Powiadomienie „Spacer w trakcie" z przyciskiem Zakończ (natywne)
+const WALK_NOTIF_ID = 91001;
+const showWalkNotification = async (petName?: string) => {
+  const ln = localNotif();
+  if (!ln?.schedule) return;
+  try {
+    await ln.requestPermissions?.().catch(() => {});
+    await ln.registerActionTypes?.({
+      types: [{ id: 'walk', actions: [{ id: 'stop', title: 'Zakończ spacer', foreground: true }] }],
+    });
+    await ln.schedule({
+      notifications: [{
+        id: WALK_NOTIF_ID,
+        title: '🐾 Spacer w trakcie',
+        body: `${petName || 'Twój pupil'} — GPS działa w tle. Dotknij, aby otworzyć.`,
+        actionTypeId: 'walk',
+        ongoing: true,
+        autoCancel: false,
+      }],
+    });
+  } catch {}
+};
+const updateWalkNotification = async (petName: string | undefined, seconds: number, meters: number) => {
+  const ln = localNotif();
+  if (!ln?.schedule) return;
+  try {
+    await ln.schedule({
+      notifications: [{
+        id: WALK_NOTIF_ID,
+        title: `🐾 ${petName || 'Spacer'} — ${formatDuration(seconds)} · ${formatDistance(meters)}`,
+        body: 'Spacer w trakcie. Dotknij, aby otworzyć.',
+        actionTypeId: 'walk',
+        ongoing: true,
+        autoCancel: false,
+      }],
+    });
+  } catch {}
+};
+const hideWalkNotification = () => {
+  localNotif()?.cancel?.({ notifications: [{ id: WALK_NOTIF_ID }] }).catch?.(() => {});
+};
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
@@ -112,6 +157,8 @@ export default function WalkTracker() {
   const [showHistory, setShowHistory] = useState(true);
 
   const watchIdRef = useRef<number | string | null>(null);
+  const bgWatcherRef = useRef<string | null>(null); // watcher GPS w tle (natywny plugin)
+  const stopWalkRef = useRef<(() => void) | null>(null); // dostęp dla przycisku w powiadomieniu
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const draftRef = useRef<NodeJS.Timeout | null>(null);
   const walkStartMsRef = useRef<number>(0);    // moment STARTU spaceru (niezmienny)
@@ -181,6 +228,17 @@ export default function WalkTracker() {
       setSharedIds(new Set(JSON.parse(localStorage.getItem(SHARED_WALKS_KEY) || '[]')));
     } catch {}
 
+    // Przycisk „Zakończ spacer" w powiadomieniu (natywna appka)
+    const ln = localNotif();
+    if (ln?.addListener) {
+      try {
+        ln.addListener('localNotificationActionPerformed', (e: any) => {
+          if (e?.actionId === 'stop') stopWalkRef.current?.();
+          else hideWalkNotification();
+        });
+      } catch {}
+    }
+
     return () => cleanupTracking();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -198,7 +256,12 @@ export default function WalkTracker() {
   useEffect(() => {
     if (isTracking && !isPaused) {
       timerRef.current = setInterval(() => {
-        setDuration(Math.floor((elapsedRef.current + Date.now() - startMsRef.current) / 1000));
+        const sec = Math.floor((elapsedRef.current + Date.now() - startMsRef.current) / 1000);
+        setDuration(sec);
+        // Co minutę odśwież statystyki w powiadomieniu
+        if (sec > 0 && sec % 60 === 0) {
+          updateWalkNotification(petOf(selectedPet)?.name, sec, distanceRef.current);
+        }
       }, 1000);
     }
     return () => {
@@ -207,11 +270,11 @@ export default function WalkTracker() {
         timerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTracking, isPaused]);
 
-  /* ---------- Obsługa pozycji GPS (wspólna dla start i resume) ---------- */
-  const onPosition = useCallback((position: GeolocationPosition) => {
-    const { latitude, longitude, accuracy } = position.coords;
+  /* ---------- Obsługa pozycji GPS (wspólna dla web, foreground i background) ---------- */
+  const handlePosition = useCallback((latitude: number, longitude: number, accuracy?: number) => {
     setGpsError('');
     setCurrentLocation({ lat: latitude, lng: longitude });
 
@@ -233,6 +296,10 @@ export default function WalkTracker() {
     setPoints(pointsRef.current);
   }, []);
 
+  const onPosition = useCallback((position: GeolocationPosition) => {
+    handlePosition(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+  }, [handlePosition]);
+
   const onPositionError = useCallback((error: GeolocationPositionError) => {
     const msg =
       error.code === 1
@@ -244,6 +311,33 @@ export default function WalkTracker() {
   }, []);
 
   const startWatching = useCallback(() => {
+    const bg = bgGeo();
+    // Aplikacja natywna — plugin śledzenia w tle: GPS działa nawet przy
+    // zminimalizowanej appce / wygaszonym ekranie (iOS: niebieski pasek lokalizacji)
+    if (isNativeApp() && bg?.addWatcher) {
+      Promise.resolve(
+        bg.addWatcher(
+          {
+            backgroundMessage: 'Petvio śledzi Twój spacer — dotknij, aby wrócić do aplikacji',
+            backgroundTitle: 'Spacer w trakcie',
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 5,
+          },
+          (loc: any, err: any) => {
+            if (err) {
+              if (err.code === 'NOT_AUTHORIZED') onPositionError({ code: 1 } as GeolocationPositionError);
+              else if (err.code === 'NOT_ENABLED') onPositionError({ code: 2 } as GeolocationPositionError);
+              return;
+            }
+            if (loc) handlePosition(loc.latitude, loc.longitude, loc.accuracy);
+          },
+        ),
+      )
+        .then((watcher: any) => { bgWatcherRef.current = watcher?.id ?? watcher; })
+        .catch(() => setGpsError('Brak zgody na lokalizację — włącz GPS w ustawieniach aplikacji.'));
+      return;
+    }
     const geo = capGeo();
     if (geo?.watchPosition) {
       // Aplikacja mobilna — wtyczka sama poprosi o zgodę, ale wywołujemy jawnie dla pewności
@@ -262,9 +356,13 @@ export default function WalkTracker() {
       timeout: 15000,
       maximumAge: 2000,
     });
-  }, [onPosition, onPositionError]);
+  }, [handlePosition, onPosition, onPositionError]);
 
   const stopWatching = useCallback(() => {
+    if (bgWatcherRef.current !== null) {
+      bgGeo()?.removeWatcher?.({ id: bgWatcherRef.current }).catch?.(() => {});
+      bgWatcherRef.current = null;
+    }
     if (watchIdRef.current === null) return;
     const geo = capGeo();
     if (geo?.clearWatch && typeof watchIdRef.current === 'string') {
@@ -276,6 +374,7 @@ export default function WalkTracker() {
   }, []);
 
   function cleanupTracking() {
+    hideWalkNotification();
     stopWatching();
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -331,6 +430,7 @@ export default function WalkTracker() {
     setDraft(null);
     startWatching();
     startDraftSaver();
+    showWalkNotification(petOf(draft.petId)?.name);
   };
 
   /* ---------- Sterowanie spacerem ---------- */
@@ -352,6 +452,7 @@ export default function WalkTracker() {
     pausedRef.current = false;
     startWatching();
     startDraftSaver();
+    showWalkNotification(petOf(selectedPet)?.name);
   };
 
   const pauseWalk = () => {
@@ -430,6 +531,8 @@ export default function WalkTracker() {
       resetTrackingState();
     }
   };
+  // Przycisk „Zakończ" w powiadomieniu wywołuje tę funkcję z zewnątrz renderu
+  stopWalkRef.current = () => { void stopWalk(); };
 
   const resetTrackingState = () => {
     pointsRef.current = [];
