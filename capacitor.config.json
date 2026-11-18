@@ -13,7 +13,8 @@
 			"@capacitor-firebase/authentication",
 			"@capacitor-firebase/messaging",
 			"@capacitor/geolocation",
-			"@capacitor/local-notifications"
+			"@capacitor/local-notifications",
+			"@capacitor/browser"
 		]
 	},
 	"plugins": {
